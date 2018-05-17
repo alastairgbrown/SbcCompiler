@@ -1,4 +1,6 @@
-﻿using System;
+﻿using SbcCore;
+using System;
+using System.Collections.Generic;
 
 namespace HelloWorld
 {
@@ -8,9 +10,11 @@ namespace HelloWorld
 
         static void Main()
         {
-            //Global.Memory[0] = 0;
-            //Console.WriteLine("Hello World");
-            Console.WriteLine($"Hello World {123} {"456"} {TestStatic}");
+            Console.WriteLine($"Hello World {123} {"456"} {TestStatic} {'0'}");
+
+            Tests.RunAllTests();
+
+            GC.Collect();
         }
     }
 }

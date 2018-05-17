@@ -1,11 +1,8 @@
-using SbcCore;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
-using System.IO;
 using System.Linq;
-using System.Reflection;
-using System.Text;
 using System.Text.RegularExpressions;
 
 namespace SbcLibrary
@@ -13,127 +10,81 @@ namespace SbcLibrary
     public class Node
     {
         public string Line { get; }
-        public Match[] Match { get; }
+        public string SignatureSource { get; }
+        public ArgsAttribute Attribute { get; }
         public Action Action { get; }
-        public List<Node> Children { get; } = new List<Node>();
+        public List<Node> Children { get; }
         public Node Parent { get; }
         public Compiler Compiler { get; }
+        public string Label { get; set; }
+        public TypeData Name { get; set; }
+        public string Value { get; set; }
+        public List<TypeData> Extensions { get; }
+        public string Keyword { get; set; }
+        public string[] Keywords { get; set; }
+        public List<ArgData> Args { get; }
+        public TypeData Type { get; set; }
+        public TypeData ClassName { get; set; }
+        public Node LocalsNode { get; set; }
+        public TypeData Extends => Extensions?.FirstOrDefault();
+        public IEnumerable<TypeData> Implements => Extensions?.Skip(1);
         public Compilation Compilation => Compiler.Compilation;
         public Config Config => Compiler.Config;
         public ISnippets Snippets => Compiler.Snippets;
+        public bool IsInterface => Keyword == nameof(Class) && Keywords.Contains("interface");
+        public bool IsValueType => Keyword == nameof(Class) && Extends == "System.ValueType";
+        public int ElementSize => IsValueType ? ClassFieldSlots.Sum(fs => fs.ElementSize) : 1;
+        public Node MethodNode => Keyword == nameof(Method) ? this : Parent;
+        public string GlobalLabel => MethodNode.Signature + Label;
+        public string BranchLabel => MethodNode.Signature + Value;
+        public List<TypeData> ArgTypes => (Args ?? Enumerable.Empty<ArgData>()).Select(a => a.Type).ToList();
+        public List<string> ArgNames => (Args ?? Enumerable.Empty<ArgData>()).Select(a => a.Name).ToList();
         public override string ToString() => Line;
+        public string StringValue => $@"{Name}";
+        public string StringLabel => $@"""{Name}""";
+        public string Signature
+            => $"{Type} {ClassName ?? Parent.Name}::{Name}" +
+                (Attribute.HasArgTypes ? $"({string.Join(",", ArgTypes)})" : null);
+        public string ClasslessSignature
+            => $"{Type} {Name}" +
+                (Attribute.HasArgTypes ? $"({string.Join(",", ArgTypes)})" : null);
 
         public Node(Compiler compiler)
         {
             Compiler = compiler;
+            Children = new List<Node>();
         }
 
         public Node(Compiler compiler, Node parent, string line, ArgsAttribute attribute, params Match[] match)
         {
             Compiler = compiler;
             Line = line;
-            Match = match;
+            SignatureSource = Line.Substring(match.Sum(m => m.Index + m.Length));
+            Attribute = attribute;
             Action = (Action)attribute.Method.CreateDelegate(typeof(Action), this);
             Parent = parent;
+            Children = Attribute.HasChildren ? new List<Node>() : null;
+            Extensions = Attribute.HasExtensions ? new List<TypeData>() : null;
+            Args = Attribute.HasArgTypes || Attribute.HasArgNames ? new List<ArgData>() : null;
 
-            new SignatureParser(Line, match.Sum(m => m.Index + m.Length), this, attribute);
+            new SignatureParser(SignatureSource).Parse(this, attribute);
 
             foreach (var m in match)
             {
                 foreach (var prop in GetType().GetProperties().Where(p => m.Groups[p.Name]?.Success == true))
                 {
                     if (prop.PropertyType == typeof(string[]))
-                    {
                         prop.SetValue(this, m.Groups[prop.Name].Captures.OfType<Capture>().Select(c => c.Value).ToArray());
-                    }
                     else
-                    {
                         prop.SetValue(this, m.Groups[prop.Name].Value);
-                    }
                 }
             }
 
             Keyword = Keyword.Substring(0, 1).ToUpper() + Keyword.Substring(1).ToLower();
+            Label = Label ?? Compiler.GetNewLabel();
         }
 
-        bool Parse(ref int pos, string text, bool consume = true)
-        {
-            if (pos + text.Length <= Line.Length && Line.Substring(pos, text.Length) == text)
-            {
-                pos += consume ? text.Length : 0;
-                return true;
-            }
-
-            return false;
-        }
-
-        string ParseName(ref int pos, string terminator1 = " ", string terminator2 = null)
-        {
-            Parse(ref pos, " ");
-            Parse(ref pos, "class ");
-
-            if (Parse(ref pos, "["))
-            {
-                for (; pos < Line.Length && !Parse(ref pos, "]"); pos++)
-                {
-                }
-                Parse(ref pos, " ");
-            }
-
-            var start = pos;
-            var depth = 0;
-
-            terminator2 = terminator2 ?? terminator1;
-
-            for (; pos < Line.Length && (depth > 0 || (!Parse(ref pos, terminator1, false) && !Parse(ref pos, terminator2, false))); pos++)
-            {
-                switch (Line[pos])
-                {
-                    case '\'':
-                        for (pos++; pos < Line.Length && Line[pos] != '\''; pos++)
-                        {
-                        }
-                        break;
-                    case '<':
-                    case '[':
-                        depth++;
-                        break;
-                    case '>':
-                    case ']':
-                        depth--;
-                        break;
-                }
-            }
-
-            return Line.Substring(start, pos - start);
-        }
-
-        public string Label { get; set; }
-        public string Name { get; set; }
-        public string Value { get; set; }
-        public string Extends { get; set; }
-        public string Keyword { get; set; }
-        public string[] Keywords { get; set; }
-        public List<ArgData> Args { get; set; }
-        public string[] CustomBytes { get; set; }
-        public string ClassName { get; set; }
-        public string Type { get; set; }
-        public Node LocalsNode { get; set; }
-        public bool Noclass { get; private set; }
-        public List<string> ArgTypes => (Args ?? Enumerable.Empty<ArgData>()).Select(a => a.Type).ToList();
-        public List<string> ArgNames => (Args ?? Enumerable.Empty<ArgData>()).Select(a => a.Name).ToList();
-
-        public string Signature
-            => $"{Correct(Type)} {Correct(ClassName ?? Parent.Name)}::{Name}" +
-                (Args == null ? null : $"({string.Join(",", ArgTypes.Select(Correct))})");
-        public string ClasslessSignature
-            => $"{Correct(Type)} {Name})" +
-                (Args == null ? null : $"({string.Join(",", ArgTypes.Select(Correct))})");
-
-        public string Correct(string type)
-            => Compiler.Classes.TryGetValue(type, out var node) ? node.Name : type;
-
-        [Directive(HasBody = true)]
+        [Directive(HasChildren = true)]
         public void Assembly()
         {
         }
@@ -143,7 +94,12 @@ namespace SbcLibrary
         {
         }
 
-        [Directive(HasBody = true)]
+        [Directive]
+        public void Hash()
+        {
+        }
+
+        [Directive(HasChildren = true)]
         public void Property()
         {
         }
@@ -158,7 +114,7 @@ namespace SbcLibrary
         {
         }
 
-        [Directive(HasBody = true)]
+        [Directive(HasChildren = true)]
         public void Event()
         {
         }
@@ -178,35 +134,48 @@ namespace SbcLibrary
         {
         }
 
-        [Directive(@"((?<Keywords>private|public|protected|internal|hidebysig|static|instance|specialname|rtspecialname|virtual|valuetype|newslot) )*",
-                    HasType = true, HasName = true, HasArgTypes = true, HasArgNames = true, HasBody = true, ExecuteOnPass1 = true)]
+        [Directive]
+        public void Override()
+        {
+        }
+
+        [Directive(@"((?<Keywords>assembly|private|public|protected|internal|hidebysig|static|instance|specialname|rtspecialname|abstract|virtual|final|valuetype|newslot) )*",
+                    HasType = true, HasName = true, HasArgTypes = true, HasArgNames = true, HasChildren = true, ExecuteOnParse = true)]
         public void Method()
         {
-            if (Compiler.Pass == 1)
+            if (Compiler.Pass == Pass.Parse)
             {
                 Compiler.Methods[Signature] = this;
             }
             else
             {
-                var ctorReturn = Children.Any(c => c.Keyword == nameof(Newobj)) ? 1 : 0;
-                var args = (Keywords.Contains("instance") ? new[] { new ArgData { Name = "this" } } : new ArgData[0]).Concat(Args).ToArray();
-                var locals = LocalsNode?.Args.ToArray() ?? new ArgData[0];
+                Compiler.CurrentArgs = (Keywords.Contains("instance") ? new[] { new ArgData { Name = "this", Type = "System.Object" } } : new ArgData[0])
+                                            .Concat(Args).ToArray();
+                Compiler.CurrentLocals = LocalsNode?.Args.ToArray() ?? new ArgData[0];
+                Compiler.CurrentTypes.Clear();
+                Compiler.CurrentTypesDebug.Clear();
+
+                Compiler.CurrentFrameSize = Compiler.PopulateArgData(Compiler.CurrentArgs, 1);
+                Compiler.CurrentFrameSize = Compiler.PopulateArgData(Compiler.CurrentLocals, Compiler.CurrentFrameSize);
 
                 Compiler.Include(Parent);
                 Compiler.EmitSource(Line, Signature);
-                Compiler.CurrentCtorReturn = Children.Any(c => c.Keyword == nameof(Newobj)) ? 1 : 0;
-                Compiler.CurrentArgCount = args.Length;
-                Compiler.CurrentLocalCount = locals.Length;
-                Compiler.CurrentCtor = Name == ".ctor" && ClassName != "System.String" ? 1 : 0;
                 Compiler.Emit(Snippets.MethodPreamble);
+                EmitBlock();
+                Compiler.EmitMethodData(
+                    ClassName ?? Parent.Name,
+                    Signature,
+                    Compiler.CurrentArgs.ToArray(),
+                    Compiler.CurrentLocals.ToArray());
+            }
+        }
 
-                foreach (var child in Children)
-                {
-                    Compiler.EmitSource(child.Line, child.Label?.Insert(0, Signature));
-                    child.Action();
-                }
-
-                Compiler.EmitMethodData(Correct(ClassName ?? Parent.Name), Signature, ctorReturn, args, locals);
+        public void EmitBlock()
+        {
+            foreach (var child in Children)
+            {
+                Compiler.EmitSource(child.Line, child.GlobalLabel);
+                child.Action();
             }
         }
 
@@ -215,50 +184,10 @@ namespace SbcLibrary
         {
         }
 
-        [Directive(@".* = \( ((?<CustomBytes>[0-9A-F]{2}) )*\)", 
-                    ExecuteOnPass1 = true)]
-        public void Custom()
-        {
-            var buffer = CustomBytes.Select(b => byte.Parse(b, NumberStyles.HexNumber)).Skip(2).ToArray();
-
-            using (var stream = new MemoryStream(buffer))
-            using (var reader = new BinaryReader(stream))
-            {
-                if (Line.Contains($"{nameof(NoclassAttribute)}::.ctor()"))
-                {
-                    Parent.Noclass = true;
-                }
-
-                if (Line.Contains($"{nameof(ConfigAttribute)}::.ctor(string, int32)"))
-                {
-                    var prop = Compiler.GetType().GetProperty(Encoding.ASCII.GetString(reader.ReadBytes(reader.ReadByte())));
-                    prop?.SetValue(Compiler, reader.ReadInt32());
-                }
-
-                if (Line.Contains($"{nameof(ImplementAttribute)}::.ctor(string)"))
-                {
-                    var name = Encoding.ASCII.GetString(reader.ReadBytes(reader.ReadByte()));
-
-                    if (Parent.Keyword == nameof(Class))
-                    {
-                        Parent.Name = name;
-                        Compiler.Classes[name] = Parent;
-                    }
-
-                    if (Parent.Keyword == nameof(Method))
-                    {
-                        var attr = new DirectiveAttribute { HasType = true, HasClassName = true, HasName = true, HasArgNames = true, HasArgTypes = true };
-                        new SignatureParser(name, 0, Parent, attr);
-                        Compiler.Methods[Parent.Signature] = Parent;
-                    }
-                }
-            }
-        }
-
-        [Directive(ExecuteOnPass1 = true)]
+        [Directive(ExecuteOnParse = true)]
         public void EntryPoint()
         {
-            if (Compiler.Pass == 1)
+            if (Compiler.Pass == Pass.Parse)
             {
                 Compiler.Include(Parent);
             }
@@ -270,10 +199,10 @@ namespace SbcLibrary
         }
 
         [Directive(@"((?<Keywords>init) )*",
-                   HasArgTypes = true, HasArgNames = true, ExecuteOnPass1 = true)]
+                   HasArgTypes = true, HasArgNames = true, ExecuteOnParse = true)]
         public void Locals()
         {
-            if (Compiler.Pass == 1)
+            if (Compiler.Pass == Pass.Parse)
             {
                 Parent.LocalsNode = this;
             }
@@ -304,19 +233,18 @@ namespace SbcLibrary
         }
 
         [Directive(@"((?<Keywords>class|static|public|private|protected|internal|initonly|assembly) )*",
-                   HasType = true, HasName = true, ExecuteOnPass1 = true)]
+                   HasType = true, HasName = true, ExecuteOnParse = true)]
         public void Field()
         {
-            if (Compiler.Pass == 1)
+            if (Compiler.Pass == Pass.Parse && Keywords.Contains("static"))
             {
-                if (Keywords.Contains("static"))
-                {
-                    Compiler.StaticFields[Signature] = this;
-                }
+                Compiler.StaticFields[Signature] = this;
             }
-            else
+            else if (Compiler.Pass == Pass.CompileExecutable)
             {
-                var cctor = $"void {Correct(Parent.Name)}::.cctor()";
+                Debug.Assert(Keywords.Contains("static"));
+
+                var cctor = $"void {Parent.Name}::.cctor()";
 
                 if (Compiler.Methods.TryGetValue(cctor, out var cctorNode))
                 {
@@ -324,14 +252,46 @@ namespace SbcLibrary
                 }
 
                 Compiler.LabelDefs[Signature] = new Label(Signature, Compiler.CurrentStaticAddr);
-                Compilation.AddressWritable.Add(Compiler.CurrentStaticAddr);
                 Compilation.AddressLabels[Compiler.CurrentStaticAddr] = "S:" + Name;
-                Compilation.StaticData.Add(0);
+                Compilation.StaticDataCount++;
             }
         }
 
-        public Node ClassBase =>
-            Name == "System.Object" ? null : Compiler.Classes[Extends == "System.ValueType" ? "System.Object" : Extends];
+        public string ClassTemplate(List<TypeData> args)
+        {
+            if (Name.Args.Count != args.Count)
+                throw new Exception($"{Name} has {Name.Args.Count} args, given {args.Count}");
+
+            var nodes = new List<object> { this };
+            var regexes = new List<string>();
+            var map = new Dictionary<string, string>();
+
+            for (int i = 0; i < Name.Args.Count; i++)
+            {
+                regexes.Add($@"\b{Name.Args[i]}\b");
+                regexes.Add($@"\!{Name.Args[i]}\b");
+                regexes.Add($@"\!{i}\b");
+                map[Name.Args[i]] = map[$"!{Name.Args[i]}"] = map[$"!{i}"] = args[i];
+            }
+
+            for (int i = 0; i < nodes.Count; i++)
+            {
+                if (nodes[i] is Node node && node.Attribute.HasChildren)
+                {
+                    nodes.Insert(i + 1, "{");
+                    nodes.InsertRange(i + 2, node.Children);
+                    nodes.Insert(i + 2 + node.Children.Count, "}");
+                }
+            }
+
+            var content = string.Join("\n", nodes);
+            var regex = new Regex(string.Join("|", regexes));
+
+            return regex.Replace(content, m => map[m.Value]);
+        }
+
+        public Node ClassBase
+            => Name == "System.Object" ? null : Compiler.Classes[IsValueType ? "System.Object" : $"{Extends}"];
 
         List<Node> _classMethodSlots;
         public List<Node> ClassMethodSlots
@@ -356,40 +316,68 @@ namespace SbcLibrary
                     }
 
                     _classMethodSlots.AddRange(Children.Where(c => c.Keyword == nameof(Method) && c.Keywords.Contains("newslot")));
-                    _classMethodSlots.ForEach(Compiler.Include);
+                    _classMethodSlots.ForEach(s => Compiler.Include(s));
                 }
 
                 return _classMethodSlots;
             }
         }
 
-        List<string> _classFieldSlots;
-        public List<string> ClassFieldSlots =>
-            _classFieldSlots ?? (_classFieldSlots =
-            (ClassBase?.ClassFieldSlots ?? Enumerable.Empty<string>())
-                .Concat(Children.Where(c => c.Keyword == nameof(Field)).Select(f => f.Signature)).ToList());
+        List<ArgData> _classFieldSlots;
+        public List<ArgData> ClassFieldSlots
+        {
+            get
+            {
+                if (_classFieldSlots != null)
+                    return _classFieldSlots;
 
-        [Directive(@"((?<Keywords>abstract|ansi|auto|autochar|beforefieldinit|explicit|interface|nested \w+|private|public|rtspecialname|sealed|sequential|serializable|specialname|unicode) )*",
-                   HasBody = true, HasName = true, HasExtends = true, ExecuteOnPass1 = true)]
+                _classFieldSlots = (ClassBase?.ClassFieldSlots ?? Enumerable.Empty<ArgData>()).ToList();
+                var count = _classFieldSlots.Count;
+                var offset = _classFieldSlots.Sum(fs => fs.ElementSize);
+
+                _classFieldSlots.AddRange(Children.Where(c => c.Keyword == nameof(Field) && !c.Keywords.Contains("static"))
+                                                  .Select(c => new ArgData { Type = c.Type, Name = c.Name, Signature = c.Signature }));
+                Compiler.PopulateArgData(_classFieldSlots.Skip(count), offset);
+
+                return _classFieldSlots;
+            }
+        }
+
+        [Directive(@"((?<Keywords>" + Compiler.ClassKeywords + ") )*",
+                   HasChildren = true, HasName = true, HasExtensions = true, ExecuteOnParse = true, ExecuteOnCompileConst = true)]
         public void Class()
         {
-            if (Compiler.Pass == 1)
+            if (Compiler.Pass == Pass.Parse)
             {
-                Compiler.Classes[Name] = this;
-            }
-            else if (!Noclass)
-            {
-                var nameString = Compiler.Include(Name);
+                if (Parent.Keyword == nameof(Class))
+                {
+                    Name.Name = $"{Parent.Name.Name}/{Name.Name}";
+                }
 
-                Compilation.AddressLabels[Compiler.CurrentStaticAddr] = "C:" + Name;
-                Compilation.StaticData.Add(nameString);
-                Compiler.LabelDefs[Name] = new Label(Name, Compiler.CurrentStaticAddr);
+                if (Name.Args != null && !Compiler.TemplateClasses.ContainsKey(Name.Name))
+                {
+                    Compiler.TemplateClasses[Name.Name] = this;
+                }
+
+                Compiler.Classes[Name] = Compiler.Classes[Name.Name] = this;
+            }
+            else if (Compiler.Pass == Pass.CompileExecutable)
+            {
+                ClassMethodSlots.ForEach(s => Compiler.Include(s));
+            }
+            else if (Compiler.Pass == Pass.CompileConst)
+            {
+                Compiler.IncludeString(this);
+
+                Compilation.AddressLabels[Compiler.CurrentConstAddr] = "C:" + Name;
+                Compilation.ConstData.Add(Compiler.LabelDefs[StringLabel].Value);
+                Compiler.LabelDefs[Name] = new Label(Name, Compiler.CurrentConstAddr);
 
                 foreach (var slot in ClassMethodSlots)
                 {
-                    Compiler.LabelRefs.Add(new Label(slot.Signature, Compiler.CurrentStaticAddr));
-                    Compilation.AddressLabels[Compiler.CurrentStaticAddr] = "M:" + slot.Name;
-                    Compilation.StaticData.Add(0);
+                    Compiler.LabelRefs.Add(new Label(slot.Signature, Compiler.CurrentConstAddr));
+                    Compilation.AddressLabels[Compiler.CurrentConstAddr] = "M:" + slot.Name;
+                    Compilation.ConstData.Add(0);
                 }
             }
         }
@@ -401,111 +389,156 @@ namespace SbcLibrary
 
         [Instruction]
         public void Nop()
-        => Compiler.Emit(Opcode.NOP);
+            => Compiler.Emit(Opcode.NOP);
 
-        [Instruction(@"""(?<Value>(?:\\.|.)*?)""")]
+        [Instruction(@"""(?<Value>(?:\\.|.)*?)""", ExecuteOnCompileConst = true)]
         public void Ldstr()
         {
-            var value = Regex.Replace(Value, @"\\.", m => m.Value == "\\n" ? "\n" : m.Value == "\\r" ? "\r" : m.Value.Substring(1));
-
-            Compiler.Emit(Compiler.Include(value), Opcode.PSH, Snippets.StackPush);
+            if (Compiler.Pass == Pass.CompileExecutable)
+            {
+                Name = new TypeData { Name = Regex.Replace(Value, @"\\.", m => m.Value == "\\n" ? "\n" : m.Value == "\\r" ? "\r" : m.Value.Substring(1)) };
+                Compiler.TypePush(null);
+                Compiler.Include(this);
+                Compiler.Emit(new Label(StringLabel), Opcode.PSH, Snippets.StackPush);
+            }
+            else if (Compiler.Pass == Pass.CompileConst)
+            {
+                Compiler.IncludeString(this);
+            }
         }
 
         [Instruction]
         public void Ldnull()
-        => Compiler.Emit(0, Opcode.PSH, Snippets.StackPush);
+            => Compiler.Emit(0, Opcode.PSH, Snippets.StackPush).TypePush(null);
 
         int GetValue()
-        => Value.StartsWith("0x") ? int.Parse(Value.Substring(2), NumberStyles.HexNumber) : int.Parse(Value);
+            => Value.StartsWith("0x")
+                ? int.Parse(Value.Substring(2), NumberStyles.HexNumber)
+                : Value.StartsWith("m")
+                    ? -int.Parse(Value.Substring(1))
+                    : int.Parse(Value);
 
-        int GetArgIndex()
-        => Compiler.CurrentArgIndex +
-            (Parent.ArgNames.IndexOf(Value) is var index && index >= 0 ? index : GetValue());
+        ArgData Arg
+            => Compiler.CurrentArgs[Parent.ArgNames.IndexOf(Value) is var index && index >= 0 ? index : GetValue()];
 
-        int GetLocIndex()
-        => Compiler.CurrentLocalIndex +
-            (Parent.LocalsNode.ArgNames.IndexOf(Value) is var index && index >= 0 ? index : GetValue());
+        ArgData Loc
+            => Compiler.CurrentLocals[Parent.LocalsNode.ArgNames.IndexOf(Value) is var index && index >= 0 ? index : GetValue()];
 
         [Instruction(@"(\.i.)?(\.s)?[ .](?<Value>\w+)?", HasName = true)]
         public void Ldarg()
-        => Compiler.Emit(GetArgIndex(), Opcode.LDY, Snippets.StackPush);
+            => Compiler.Emit(Snippets.CopyFromFrameToStack(Arg));
+
+        [Instruction(@"(\.i.)?(\.s)?[ .](?<Value>-?\w+)?")]
+        public void Ldc()
+            => Compiler.Emit(GetValue(), Opcode.PSH, Snippets.StackPush).TypePush(null);
 
         [Instruction(@"(\.i.)?(\.s)?[ .](?<Value>\w+)?", HasName = true)]
-        public void Ldc()
-        => Compiler.Emit(GetValue(), Opcode.PSH, Snippets.StackPush);
+        public void Ldloc()
+            => Compiler.Emit(Snippets.CopyFromFrameToStack(Loc));
 
-        [Instruction(@"\.(?<Value>\w+)")]
+        [Instruction(@"(\.(?<Value>\d)|(\.s (?<Value>\w+)))|(?<Name>)")]
+        public void Ldloca()
+            => Compiler.TypePush(null)
+                       .Emit(Snippets.GetRY, Loc.Offset, Opcode.AKA, Snippets.StackPush);
+
+        [Instruction]
+        public void Ldlen()
+            => Compiler.Emit(Snippets.Ldlen);
+
+        [Instruction(@"(\.(?<Value>\d)|(\.s (V_)?(?<Value>\w+)))|(?<Name>)")]
+        public void Starg()
+            => Compiler.Emit(Snippets.CopyFromStackToFrame(Arg));
+
+        [Instruction(@"(\.(?<Value>\d)|(\.s (V_)?(?<Value>\w+)))|(?<Name>)")]
+        public void Stloc()
+            => Compiler.Emit(Snippets.CopyFromStackToFrame(Loc));
+
+        TypeData ElemType => Value == "ref" ? (TypeData)"System.Object" :
+                             string.IsNullOrWhiteSpace(Value) ? Type : (TypeData)"System.Int32";
+
+        [Instruction(@"(\.(?<Value>[!]?\w+))?", HasType = true)]
         public void Ldelem()
-        => Compiler.Emit(Snippets.StackPop, Snippets.StackGet, Opcode.ADD, 1, Opcode.LDA, Snippets.StackSet);
+            => Compiler.TypePop().TypePop()
+                       .Emit(Snippets.StackPop,
+                             Compiler.GetElementSize(ElemType), Opcode.PSH, Opcode.MLT, Opcode.POP,
+                             Snippets.StackPop,
+                             Opcode.ADD, 1, Opcode.AKA,
+                             Snippets.CopyFromMemoryToStack(ElemType));
+
+        [Instruction(@"", HasType = true)]
+        public void Ldelema()
+            => Compiler.TypePop().TypePop().TypePush("System.Object")
+                       .Emit(Snippets.StackPop,
+                             Compiler.GetElementSize(Type), Opcode.PSH, Opcode.MLT, Opcode.POP,
+                             Snippets.StackGet,
+                             Opcode.ADD, 1, Opcode.AKA,
+                             Snippets.StackSet);
+
+        [Instruction(@"(\.(?<Value>[!]?\w+))?", HasType = true)]
+        public void Stelem()
+            => Compiler.Emit(-Compiler.GetElementSize(ElemType), Opcode.LDX,
+                             Compiler.GetElementSize(ElemType), Opcode.PSH, Opcode.MLT, Opcode.POP,
+                             -1 - Compiler.GetElementSize(ElemType), Opcode.LDX,
+                             Opcode.ADD, 1, Opcode.AKA)
+                       .Emit(Snippets.CopyFromStackToMemory(ElemType))
+                       .Emit(Snippets.StackPop2).TypePop().TypePop();
+
+        ArgData FieldData
+            => Compiler.GetClass(ClassName).ClassFieldSlots.First(fs => fs.Signature == Signature);
 
         [Instruction(@"((?<Keywords>class|static|public) )*",
                      HasType = true, HasClassName = true, HasName = true)]
         public void Ldfld()
-        => Compiler.Emit(Snippets.StackGet, Compiler.Classes[ClassName].ClassFieldSlots.IndexOf(Signature), Opcode.LDA, 
-                         Snippets.StackSet);
+            => Compiler.TypePop()
+                       .Emit(Snippets.StackPop, FieldData.Offset, Opcode.AKA)
+                       .Emit(Snippets.CopyFromMemoryToStack(Type));
 
         [Instruction(@"((?<Keywords>class|static|public) )*",
                      HasType = true, HasClassName = true, HasName = true)]
         public void Ldsfld()
         {
-            if (ClassName == "SbcCore.Global")
-            {
-                return;
-            }
-
-            Compiler.Include(Compiler.StaticFields[Signature]);
-            Compiler.Emit(new Label(Signature), Opcode.PSH, Opcode.LDA, Snippets.StackPush);
+            if (ClassName == "SbcLibrary.Global")
+                Compiler.TypePush("void");
+            else
+                Compiler.Include(Compiler.StaticFields[Signature])
+                        .Emit(new Label(Signature), Opcode.PSH, Snippets.CopyFromMemoryToStack(Type));
         }
-
-        [Instruction(@"(\.i.)?(\.s)?[ .](?<Value>\w+)?", HasName = true)]
-        public void Ldloc()
-        => Compiler.Emit(GetLocIndex(), Opcode.LDY, Snippets.StackPush);
-
-        [Instruction(@"(\.(?<Value>\d)|(\.s (?<Value>\w+)))|(?<Name>)")]
-        public void Ldloca()
-        => Compiler.Emit(Snippets.GetY, GetLocIndex(), Opcode.AKA, Snippets.StackPush);
-
-        [Instruction]
-        public void Ldlen()
-        => Compiler.Emit(Snippets.Ldlen);
-
-        [Instruction(@"(\.(?<Value>\d)|(\.s (V_)?(?<Value>\w+)))|(?<Name>)")]
-        public void Starg()
-        => Compiler.Emit(Snippets.StackPop, GetArgIndex(), Opcode.STY);
-
-        [Instruction(@"(\.(?<Value>\d)|(\.s (V_)?(?<Value>\w+)))|(?<Name>)")]
-        public void Stloc()
-        => Compiler.Emit(Snippets.StackPop, GetLocIndex(), Opcode.STY);
-
-        [Instruction(@"\.(?<Value>\w+)")]
-        public void Stelem()
-        => Compiler.Emit(-2, Opcode.LDX, -1, Opcode.LDX, Opcode.ADD, Opcode.LDX, Opcode.SWP, 1, Opcode.STA, -3, Opcode.AKX);
 
         [Instruction(@"((?<Keywords>class|static|public) )*",
                      HasType = true, HasClassName = true, HasName = true)]
         public void Stfld()
-        => Compiler.Emit(Snippets.StackPop2, Compiler.Classes[ClassName].ClassFieldSlots.IndexOf(Signature), Opcode.STA);
+            => Compiler.Emit(-FieldData.ElementSize, Opcode.LDX, FieldData.Offset, Opcode.AKA)
+                       .Emit(Snippets.CopyFromStackToMemory(Type))
+                       .Emit(Snippets.StackPop).TypePop();
 
         [Instruction(@"((?<Keywords>class|static|public) )*",
                      HasType = true, HasClassName = true, HasName = true)]
         public void Stsfld()
+        => Compiler.Include(Compiler.StaticFields[Signature])
+                   .Emit(new Label(Signature), Opcode.PSH)
+                   .Emit(Snippets.CopyFromStackToMemory(Type));
+
+        private void CallArgs(bool includesthis)
         {
-            Compiler.Include(Compiler.StaticFields[Signature]);
-            Compiler.Emit(Snippets.StackPop, new Label(Signature), Opcode.PSH, Opcode.STA);
+            for (int i = 0; i < Args.Count + (includesthis ? 1 : 0); i++)
+                Compiler.TypePop();
+            Compiler.TypePush(Type);
         }
 
         [Instruction(@" ?((?<Keywords>instance) )*",
                      HasType = true, HasClassName = true, HasName = true, HasArgTypes = true)]
         public void Call()
         {
+            CallArgs(Keywords?.Contains("instance") == true);
+
             if (ClassName == "SbcLibrary.Config" &&
-                Cpu.ConfigProps.TryGetValue(Name.Replace("get_", ""), out var config))
+                Config.GetType().GetProperty(Name.Name.Replace("get_", "")) is var config)
             {
-                Compiler.Emit(config.GetValue(Config), Opcode.PSH, Snippets.StackPush);
+                Compiler.Emit((int)config.GetValue(Config), Opcode.PSH, Snippets.StackPush);
             }
-            else if (Compiler.SnippetsBySignature.TryGetValue(Signature, out var snippet))
+            else if (Compiler.Inlines.TryGetValue(Signature, out var inline))
             {
-                snippet(Compiler, Config);
+                inline();
             }
             else
             {
@@ -521,8 +554,9 @@ namespace SbcLibrary
         {
             if (Compiler.Methods.TryGetValue(Signature, out var method) && method.Keywords.Contains("newslot"))
             {
-                var slot = Compiler.Classes[ClassName].ClassMethodSlots.IndexOf(method);
+                var slot = Compiler.GetClass(ClassName).ClassMethodSlots.IndexOf(method);
 
+                CallArgs(Keywords?.Contains("instance") == true);
                 Compiler.Emit(-Args.Count, Opcode.LDX, -1, Opcode.LDA, slot, Opcode.LDA, Opcode.JSR);
             }
             else
@@ -535,73 +569,119 @@ namespace SbcLibrary
                      HasType = true)]
         public void Newarr()
         {
-            var newarr = Compiler.Methods["int32 SbcCore.Implementations::Newarr(int32)"];
+            var newarr = Compiler.Methods[Compiler.Newarr];
+            var elementSize = Compiler.GetElementSize(Type);
 
             Compiler.Include(newarr);
-            Compiler.Emit(new Label(newarr.Signature), Opcode.PSH, Opcode.JSR);
+            Compiler.Emit(
+                0, Opcode.PSH, Snippets.StackPush, // TODO vtable
+                elementSize, Opcode.PSH, Snippets.StackPush,
+                new Label(newarr.Signature), Opcode.PSH, Opcode.JSR);
         }
 
         [Instruction(@" ?((?<Keywords>instance) )*",
                      HasType = true, HasClassName = true, HasName = true, HasArgTypes = true)]
         public void Newobj()
         {
-            if (ClassName == "System.String")
+            CallArgs(false);
+
+            if (Signature == Compiler.StringCtor)
             {
-                Call();
+                // This is what we need to use here
+                var method = Compiler.Methods[Compiler.StringCtorMethod];
+                Compiler.Include(method);
+                Compiler.Emit(new Label(method.Signature), Opcode.PSH, Opcode.JSR);
+
+                // But we need to patch the vtable pointer to make it a string
                 Compiler.Emit(new Label(ClassName), Opcode.PSH, Snippets.StackGet, -1, Opcode.STA);
                 return;
             }
 
-            var classNode = Compiler.Classes[ClassName];
-            var newobj = Compiler.Methods["int32 SbcCore.Implementations::Newobj(int32,int32)"];
+            var classNode = Compiler.GetClass(ClassName);
+            var newobj = Compiler.Methods[Compiler.Newobj];
             var ctor = Compiler.Methods[Signature];
+            var argsSize = Compiler.PopulateArgData(Args);
+            var typeSize = Compiler.GetElementSize(ClassName);
 
+            Args.ForEach(a => Compiler.TypePop());
+            Compiler.TypePush(Type);
             Compiler.Include(classNode);
-            Compiler.Include(newobj);
             Compiler.Include(ctor);
-            Compiler.Emit(classNode.ClassFieldSlots.Count, Opcode.PSH, Snippets.StackPush);
-            Compiler.Emit(new Label(ClassName), Opcode.PSH, Snippets.StackPush);
-            Compiler.Emit(new Label(newobj.Signature), Opcode.PSH, Opcode.JSR);
-            Compiler.Emit(Snippets.StackGet, 1, Opcode.STY);
+
+            // Insert two slots under the args - one to become 'this' for the constructor
+            // the other to become the return value
+            Compiler.Emit(typeSize + 1, Opcode.AKX);
+
+            if (argsSize > 0)
+                Compiler.Emit(Snippets.GetRX, Opcode.DUP, -1 - typeSize, Opcode.AKA, argsSize, Opcode.PSH, Snippets.MBD);
+
+            if (classNode.IsValueType)
+            {
+                Compiler.Emit(Snippets.GetRX, -argsSize - typeSize, Opcode.AKA, -argsSize, Opcode.STX);
+            }
+            else
+            {
+                // Create space on the heap
+                Compiler.Include(newobj);
+                Compiler.Emit(classNode.ClassFieldSlots.Count, Opcode.PSH, Snippets.StackPush);
+                Compiler.Emit(new Label(ClassName), Opcode.PSH, Snippets.StackPush);
+                Compiler.Emit(new Label(newobj.Signature), Opcode.PSH, Opcode.JSR);
+
+                Compiler.Emit(Snippets.StackPop, Opcode.DUP, -argsSize - 1, Opcode.STX, -argsSize, Opcode.STX);
+            }
+
             Compiler.Emit(new Label(ctor.Signature), Opcode.PSH, Opcode.JSR);
-            Compiler.Emit(1, Opcode.LDY, Snippets.StackPush);
         }
+
+        [Instruction(@" ?((?<Keywords>instance) )*",
+             HasType = true)]
+        public void Initobj()
+            => Compiler.TypePop()
+                       .Emit(0, Opcode.PSH, Snippets.StackPop, Opcode.STA);
 
         [Instruction(@"(\.\w+)? (?<Value>\w+)")]
         public void Br()
-        => Compiler.Emit(new Label(Parent.Signature + Value), Opcode.JMP);
+            => Compiler.Emit(new Label(BranchLabel), Opcode.JMP);
 
         [Instruction(@"(\.\w+)? (?<Value>\w+)")]
         public void Brtrue()
-        => Compiler.Emit(Snippets.StackPop, Opcode.ZEQ, new Label(Parent.Signature + Value), Opcode.JPZ);
+            => Compiler.TypePop()
+                       .Emit(Snippets.StackPop, Opcode.ZEQ, new Label(BranchLabel), Opcode.JPZ);
 
         [Instruction(@"(\.\w+)? (?<Value>\w+)")]
         public void Brfalse()
-        => Compiler.Emit(Snippets.StackPop, new Label(Parent.Signature + Value), Opcode.JPZ);
+            => Compiler.TypePop()
+                       .Emit(Snippets.StackPop, new Label(BranchLabel), Opcode.JPZ);
 
         [Instruction(@"(\.\w+)? (?<Value>\w+)")]
         public void Beq()
-        => Compiler.Emit(Snippets.StackPop2, Opcode.SUB, new Label(Parent.Signature + Value), Opcode.JPZ);
+            => Compiler.TypePop().TypePop()
+                       .Emit(Snippets.StackPop2, Opcode.SUB, new Label(BranchLabel), Opcode.JPZ);
 
         [Instruction(@"(\.\w+)? (?<Value>\w+)")]
         public void Bne()
-        => Compiler.Emit(Snippets.StackPop2, Opcode.SUB, Opcode.ZEQ, new Label(Parent.Signature + Value), Opcode.JPZ);
+            => Compiler.TypePop().TypePop()
+                       .Emit(Snippets.StackPop2, Opcode.SUB, Opcode.ZEQ, new Label(BranchLabel), Opcode.JPZ);
 
         [Instruction(@"(\.\w+)? (?<Value>\w+)")]
         public void Bgt()
-        => Compiler.Emit(Snippets.StackPop2, Opcode.AGB, Opcode.ZEQ, new Label(Parent.Signature + Value), Opcode.JPZ);
+            => Compiler.TypePop().TypePop()
+                       .Emit(Snippets.StackPop2, Opcode.AGB, Opcode.ZEQ, new Label(BranchLabel), Opcode.JPZ);
 
         [Instruction(@"(\.\w+)? (?<Value>\w+)")]
         public void Bge()
-        => Compiler.Emit(Snippets.StackPop2, Opcode.SWP, Opcode.AGB, new Label(Parent.Signature + Value), Opcode.JPZ);
+            => Compiler.TypePop().TypePop()
+                       .Emit(Snippets.StackPop2, Opcode.SWP, Opcode.AGB, new Label(BranchLabel), Opcode.JPZ);
 
         [Instruction(@"(\.\w+)? (?<Value>\w+)")]
         public void Blt()
-        => Compiler.Emit(Snippets.StackPop2, Opcode.SWP, Opcode.AGB, Opcode.ZEQ, new Label(Parent.Signature + Value), Opcode.JPZ);
+            => Compiler.TypePop().TypePop()
+                       .Emit(Snippets.StackPop2, Opcode.SWP, Opcode.AGB, Opcode.ZEQ, new Label(BranchLabel), Opcode.JPZ);
 
         [Instruction(@"(\.\w+)? (?<Value>\w+)")]
         public void Ble()
-        => Compiler.Emit(Snippets.StackPop2, Opcode.AGB, new Label(Parent.Signature + Value), Opcode.JPZ);
+            => Compiler.TypePop().TypePop()
+                       .Emit(Snippets.StackPop2, Opcode.AGB, new Label(BranchLabel), Opcode.JPZ);
 
         [Instruction]
         public void Conv()
@@ -612,13 +692,13 @@ namespace SbcLibrary
                      HasType = true)]
         public void Box()
         {
-            var classNode = Compiler.Classes[Type];
-            var newobj = Compiler.Methods["int32 SbcCore.Implementations::Newobj(int32,int32)"];
-
+            var classNode = Compiler.GetClass(Type);
+            var newobj = Compiler.Methods[Compiler.Newobj];
+            Compiler.TypePop().TypePush(null);
             Compiler.Include(classNode);
             Compiler.Include(newobj);
             Compiler.Emit(classNode.ClassMethodSlots.Count, Opcode.PSH, Snippets.StackPush);
-            Compiler.Emit(new Label(Type), Opcode.PSH, Snippets.StackPush);
+            Compiler.Emit(new Label(classNode.Name), Opcode.PSH, Snippets.StackPush);
             Compiler.Emit(new Label(newobj.Signature), Opcode.PSH, Opcode.JSR);
             Compiler.Emit(-1, Opcode.LDX, Snippets.StackGet, Opcode.STA);
             Compiler.Emit(Snippets.StackPop, Snippets.StackSet);
@@ -626,59 +706,118 @@ namespace SbcLibrary
 
         [Instruction]
         public void Add()
-        => Compiler.Emit(Snippets.StackPop, Snippets.StackGet, Opcode.ADD, Snippets.StackSet);
+            => Compiler.TypePop()
+                       .Emit(Snippets.StackPop, Snippets.StackGet, Opcode.ADD, Snippets.StackSet);
 
         [Instruction]
         public void Sub()
-        => Compiler.Emit(Snippets.StackPop, Snippets.StackGet, Opcode.SWP, Opcode.SUB, Snippets.StackSet);
+            => Compiler.TypePop()
+                       .Emit(Snippets.StackPop, Snippets.StackGet, Opcode.SWP, Opcode.SUB, Snippets.StackSet);
 
         [Instruction]
         public void Mul()
-        => Compiler.Emit(Snippets.StackPop, Snippets.StackGet, Opcode.MLT, Opcode.POP, Snippets.StackSet);
+            => Compiler.TypePop()
+                       .Emit(Snippets.StackPop, Snippets.StackGet, Opcode.MLT, Opcode.POP, Snippets.StackSet);
 
         [Instruction]
         public void Neg()
-        => Compiler.Emit(0, Opcode.PSH, Snippets.StackGet, Opcode.SUB, Snippets.StackSet);
+            => Compiler.Emit(0, Opcode.PSH, Snippets.StackGet, Opcode.SUB, Snippets.StackSet);
 
         [Instruction]
         public void Or()
-        => Compiler.Emit(Snippets.StackPop, Snippets.StackGet, Opcode.IOR, Snippets.StackSet);
+            => Compiler.TypePop()
+                       .Emit(Snippets.StackPop, Snippets.StackGet, Opcode.IOR, Snippets.StackSet);
 
         [Instruction]
         public void And()
-        => Compiler.Emit(Snippets.StackPop, Snippets.StackGet, Opcode.AND, Snippets.StackSet);
+            => Compiler.TypePop()
+                       .Emit(Snippets.StackPop, Snippets.StackGet, Opcode.AND, Snippets.StackSet);
+
+        [Instruction]
+        public void Shl()
+            => Compiler.TypePop()
+                       .Emit(Snippets.StackPop, Snippets.StackGet, Opcode.SHL, Snippets.StackSet);
+
+        [Instruction]
+        public void Shr()
+            => Compiler.TypePop()
+                       .Emit(Snippets.StackPop, Snippets.StackGet, Opcode.SHR, Snippets.StackSet);
 
         [Instruction]
         public void Clt()
-        => Compiler.Emit(Snippets.StackPop, Snippets.StackGet, Opcode.SWP, Opcode.AGB, Snippets.StackSet);
+            => Compiler.TypePop()
+                       .Emit(Snippets.StackPop, Snippets.StackGet, Opcode.SWP, Opcode.AGB, Snippets.StackSet);
 
         [Instruction]
         public void Ceq()
-        => Compiler.Emit(Snippets.StackPop, Snippets.StackGet, Opcode.SUB, Opcode.ZEQ, Snippets.StackSet);
+            => Compiler.TypePop()
+                       .Emit(Snippets.StackPop, Snippets.StackGet, Opcode.SUB, Opcode.ZEQ, Snippets.StackSet);
 
         [Instruction]
         public void Cgt()
-        => Compiler.Emit(Snippets.StackPop, Snippets.StackGet, Opcode.AGB, Snippets.StackSet);
+            => Compiler.TypePop()
+                       .Emit(Snippets.StackPop, Snippets.StackGet, Opcode.AGB, Snippets.StackSet);
 
         [Instruction]
         public void Dup()
-        => Compiler.Emit(Snippets.StackDup);
-
-        [Instruction]
-        public void Pop()
-        => Compiler.Emit(Snippets.StackDrop);
-
-        [Instruction]
-        public void Ret()
-        => Compiler.Emit(Snippets.MethodReturn);
-
-        [Instruction]
-        public void Finally()
         {
+            var count = Compiler.GetElementSize(Compiler.CurrentTypes.Peek());
+
+            Compiler.TypePush(Compiler.CurrentTypes.Peek());
+            for (int i = 0; i < count; i++)
+                Compiler.Emit(-(count - 1), Opcode.LDX, Snippets.StackPush);
         }
 
         [Instruction]
+        public void Pop()
+        {
+            var count = Compiler.GetElementSize(Compiler.CurrentTypes.Pop());
+
+            for (int i = 0; i < count; i++)
+                Compiler.Emit(Snippets.StackDrop);
+        }
+
+        [Instruction]
+        public void Ret()
+            => Compiler.Emit(Snippets.MethodReturn);
+
+        [Directive(HasChildren = true)]
+        public void Try()
+        {
+            var finallyBlock = Parent.Children[Parent.Children.IndexOf(this) + 1];
+
+            Debug.Assert(finallyBlock.Keyword == nameof(Finally));
+
+            Compiler.FinallyBlocks.Push(finallyBlock);
+            EmitBlock();
+            Compiler.FinallyBlocks.Pop();
+        }
+
+        [Instruction(HasChildren = true)]
+        public void Finally()
+        {
+            Compiler.Emit(Snippets.StackPush);
+            EmitBlock();
+        }
+
+        [Instruction]
+        public void Endfinally()
+            => Compiler.Emit(Snippets.StackPop, Opcode.JSR);
+
+        [Instruction(@"(\.\w+)? (?<Value>\w+)")]
         public void Leave()
+        {
+            foreach (var finallyBlock in Compiler.FinallyBlocks)
+            {
+                Compiler.Emit(new Label(MethodNode.Signature + finallyBlock.Label), Opcode.PSH, Opcode.JSR);
+            }
+
+            Compiler.CurrentTypes.Clear();
+            Compiler.Emit(new Label(BranchLabel), Opcode.JMP);
+        }
+
+        [Instruction(@"\.", HasType = true)]
+        public void Constrained()
         {
         }
     }

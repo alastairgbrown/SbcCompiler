@@ -2,16 +2,11 @@
 
 namespace SbcLibrary
 {
-    [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct | AttributeTargets.Method)]
-    public class ImplementAttribute : Attribute
+    [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct | AttributeTargets.Interface)]
+    public class ImplementClassAttribute : Attribute
     {
-        public ImplementAttribute(string name)
-        {
-        }
-    }
+        public string Name { get; }
 
-    [AttributeUsage(AttributeTargets.Class)]
-    public class NoclassAttribute : Attribute
-    {
+        public ImplementClassAttribute(string name) => Name = name;
     }
 }

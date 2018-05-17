@@ -2,15 +2,14 @@
 
 namespace SbcCore
 {
-    [Implement("System.Reflection.MemberInfo")]
+    [ImplementClass("System.Reflection.MemberInfo")]
     public class System_Reflection_MemberInfo
     {
         public string Name { get; set; }
     }
 
-    [Implement("System.Type")]
+    [ImplementClass("System.Type")]
     public class System_Type : System_Reflection_MemberInfo
     {
     }
-
 }

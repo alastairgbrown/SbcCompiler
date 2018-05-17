@@ -2,12 +2,11 @@
 
 namespace SbcCore
 {
-    [Implement("System.Int32")]
+    [ImplementClass("System.Int32")]
     struct System_Int32 
     {
         internal int m_value;
 
-        [Implement("string System.Int32::ToString()")]
         public override string ToString()
         {
             var tens = 10;

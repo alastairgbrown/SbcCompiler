@@ -8,15 +8,16 @@ namespace SbcLibrary
 {
     public abstract class ArgsAttribute : Attribute
     {
-        public bool ExecuteOnPass1 { get; set; }
-        public bool HasBody { get; set; }
+        public bool ExecuteOnParse { get; set; }
+        public bool ExecuteOnCompileConst { get; set; }
+        public bool HasChildren { get; set; }
 
         public bool HasType { get; set; }
         public bool HasClassName { get; set; }
         public bool HasName { get; set; }
         public bool HasArgTypes { get; set; }
         public bool HasArgNames { get; set; }
-        public bool HasExtends { get; set; }
+        public bool HasExtensions { get; set; }
         public MethodInfo Method { get; set; }
         public Regex Regex { get; }
 

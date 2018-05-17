@@ -20,7 +20,6 @@ namespace SbcEmulator
         public List<CodeLine> SourceLines { get; set; }
         public List<CodeLine> CodeLines { get; set; }
         public List<RegisterValue> RegisterValues { get; } = new List<RegisterValue>();
-        public Dictionary<int, string> StaticLabels { get; set; } = new Dictionary<int, string>();
         public AddressSlot[] AddressesByAddrIdx { get; set; } = new AddressSlot[0];
         public string[] FrameNames { get; set; } = new string[0];
         public List<MethodData> CallStack { get; } = new List<MethodData>();
@@ -51,7 +50,7 @@ namespace SbcEmulator
             //}
 
             Compilation = compiler.Compilation;
-            Cpu = new Cpu { Config = Config, PC = Config.EntryPoint };
+            Cpu = new Cpu { Config = Config, PC = Config.MainEntryPoint };
             Cpu.OnSetMemory += Cpu_OnSetMemory;
 
             SourceLines = Compilation.ExecutableLines.Select(l => new CodeLine { AddrIdx = l.Key, Line = l.Value }).ToList();
@@ -87,7 +86,7 @@ namespace SbcEmulator
 
             RegisterValues.Add(new RegisterValue { Name = nameof(Config.HeapPointer), ValueFunc = cpu => cpu.Memory[Config.HeapPointer] });
 
-            for (int i = 0; i < 5; i++)
+            for (int i = 0; i < 10; i++)
             {
                 int x = i;
                 int? f(Cpu cpu) => cpu.RX - x > Config.StackStart && cpu.RX - x < Config.StackStart + Config.StackStart ? cpu.Memory[cpu.RX - x] : (int?)null;
@@ -119,13 +118,13 @@ namespace SbcEmulator
         {
             MethodsMenuItem.DropDownItems.Clear();
 
-            foreach (var className in Compilation.MethodData.GroupBy(m => m.ClassName))
+            foreach (var className in Compilation.MethodData.OrderBy(m => m.ClassName).GroupBy(m => m.ClassName))
             {
                 var classMenu = new ToolStripMenuItem(className.Key);
 
                 MethodsMenuItem.DropDownItems.Add(classMenu);
 
-                foreach (var method in className)
+                foreach (var method in className.OrderBy(m => m.Signature))
                 {
                     classMenu.DropDownItems.Add(
                         new ToolStripMenuItem(method.Signature, null, (s, e) => SelectAddrIdx(method.AddrIdx)));
@@ -143,7 +142,18 @@ namespace SbcEmulator
 
             if (e.Key == Config.BreakAddress)
             {
-                throw new BreakException();
+                throw e.Value == Config.BreakAssert ? new Exception("Assert") : new BreakException();
+            }
+
+            if (e.Key == Config.HeapPointer &&
+                ((e.Value & 0xF) != 0 || e.Value < Config.HeapStart || e.Value >= Config.HeapStart + Config.HeapSize))
+            {
+                throw new Exception($"Invalid heap pointer value {e.Value}");
+            }
+
+            if (e.Key > Cpu.RX && e.Key < Cpu.RY)
+            {
+                throw new Exception($"Attempted write between Stack and frame");
             }
 
             if (!Compilation.AddressWritable.Contains(e.Key))
@@ -386,20 +396,16 @@ namespace SbcEmulator
             {
                 e.Value = FrameNames[e.RowIndex];
             }
-            else if (e.ColumnIndex == MemoryName.Index && sender == Memory)
+            else if (e.ColumnIndex == MemoryName.Index && sender == Memory && Compilation.AddressLabels.TryGetValue(address, out var label))
             {
-                e.Value = StaticLabels.TryGetValue(address, out var value) ? value
-                          : address >= Config.ExecutableStart && address < Config.ExecutableStart + Config.ExecutableSize ? "Executable"
-                          : address >= Config.StackStart && address < Config.StackStart + Config.StackSize ? "Stack"
-                          : address >= Config.HeapStart && address < Config.HeapStart + Config.HeapSize ? "Heap"
-                          : address >= Config.StaticStart && address < Config.StaticStart + Config.StaticSize ? "Static" : "";
+                e.Value = label;
             }
         }
 
         bool IsAddressPointingToCode(int address)
             => (address - Cpu.RY is var row &&
                 row >= 0 && row < FrameNames.Length && FrameNames[row]?.StartsWith("M:") == true) ||
-                StaticLabels.TryGetValue(address, out var label) && label.StartsWith("M:");
+                Compilation.AddressLabels.TryGetValue(address, out var label) && label.StartsWith("M:");
 
         private void Memory_CellContentDoubleClick(object sender, DataGridViewCellEventArgs e)
         {

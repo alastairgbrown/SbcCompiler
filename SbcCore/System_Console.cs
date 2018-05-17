@@ -2,9 +2,9 @@
 
 namespace SbcCore
 {
+    [ImplementClass("System.Console")]
     public class System_Console 
     {
-        [Implement("void System.Console::Write(string message)")]
         public static void Write(string message)
         {
             for (var i = 0; i < message.Length; i++)
@@ -13,7 +13,6 @@ namespace SbcCore
             }
         }
 
-        [Implement("void System.Console::WriteLine(string message)")]
         public static void WriteLine(string message)
         {
             Write(message);

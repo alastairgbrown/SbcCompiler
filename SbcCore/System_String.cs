@@ -4,29 +4,25 @@ using System.Text;
 
 namespace SbcCore
 {
-    [Implement("System.String")]
+    [ImplementClass("System.String")]
     public class System_String : System_Object
     {
-        private int _length;
+        [Inline]
+        public char get_Chars(int index)
+            => Global.Emit<char>(Global.Snippets.StackPop, 
+                                 Global.Snippets.StackGet, Opcode.ADD, 1, Opcode.LDA, 
+                                 Global.Snippets.StackSet);
 
-        [Snippet("char System.String::get_Chars(int32)")]
-        public static Snippet get_Chars => new Snippet((compiler, config)
-        => compiler.Emit(compiler.Snippets.StackPop, compiler.Snippets.StackGet, Opcode.ADD, 1, Opcode.LDA, compiler.Snippets.StackSet));
+        [Inline]
+        public int get_Length()
+            => Global.Emit<int>(Global.Snippets.Ldlen);
 
-        [Snippet("int32 System.String::get_Length()")]
-        public static Snippet get_Length => new Snippet((compiler, config)
-        => compiler.Emit(compiler.Snippets.Ldlen));
+        [Inline]
+        private string ToStringInline() 
+            => Global.Emit<string>();
 
-        [Implement("string System.String::ToString()")]
-        public override string ToString() => ToString1();
+        public override string ToString() => ToStringInline();
 
-        private string ToString1() => throw new NotImplementedException();
-
-        [Snippet("string System.String::ToString1()")]
-        public static Snippet ToString2 => new Snippet((compiler, config)
-        => compiler.Emit());
-
-        [Implement("void System.String::.ctor(char[] src, int32 srcIdx, int32 len)")]
         public static char[] ctor(char[] src, int srcIdx, int len)
         {
             var str = new char[len];
@@ -34,36 +30,73 @@ namespace SbcCore
             return str;
         }
 
-        [Implement("int System.String::Compare(string a, string b)")]
+        public static bool op_Equality(string a, string b) => Compare(a, b) == 0;
+
         public static int Compare(string a, string b)
         {
-            int aLen = a.Length, bLen = b.Length;
+            int aLen = a.Length, bLen = b.Length, comp = 0;
 
-            for (int i = 0; i < aLen && i < bLen; i++)
+            for (int i = 0; i < aLen && i < bLen && comp == 0; i++)
             {
-                if (a[i] < b[i])
-                    return -1;
-                if (a[i] > b[i])
-                    return 1;
+                comp = a[i] - b[i];
             }
 
-            return aLen < bLen ? -1 : aLen > bLen ? 1 : 0;
+            return comp == 0 ? aLen - bLen : comp;
         }
 
-        [Implement("string System.String::Format(string format, object arg1)")]
         public static string Format(string format, object arg1)
-            => string.Format(format, new[] { arg1 });
+            => new StringBuilder().AppendFormat(format, new[] { arg1 }).ToString();
 
-        [Implement("string System.String::Format(string format, object arg1, object arg2)")]
         public static string Format(string format, object arg1, object arg2)
-            => string.Format(format, new[] { arg1, arg2 });
+            => new StringBuilder().AppendFormat(format, new[] { arg1, arg2 }).ToString();
 
-        [Implement("string System.String::Format(string format, object arg1, object arg2, object arg3)")]
         public static string Format(string format, object arg1, object arg2, object arg3)
-            => string.Format(format, new[] { arg1, arg2, arg3 });
+            => new StringBuilder().AppendFormat(format, new[] { arg1, arg2, arg3 }).ToString();
 
-        [Implement("string System.String::Format(string format, params object[] args)")]
         public static string Format(string format, params object[] args)
             => new StringBuilder().AppendFormat(format, args).ToString();
+
+        public static String Concat(String str0, String str1)
+            => new StringBuilder(str0.Length + str1.Length)
+                         .Append(str0).Append(str1).ToString();
+
+        public static String Concat(String str0, String str1, String str2)
+            => new StringBuilder(str0.Length + str1.Length + str2.Length)
+                         .Append(str0).Append(str1).Append(str2).ToString();
+
+        public static String Concat(String str0, String str1, String str2, String str3)
+            => new StringBuilder(str0.Length + str1.Length + str2.Length + str2.Length)
+                         .Append(str0).Append(str1).Append(str2).Append(str3).ToString();
+
+        public static String Concat(params String[] values)
+        {
+            var sb = new StringBuilder();
+            for (int i = 0; i < values.Length; i++)
+                sb.Append(values[i]);
+            return sb.ToString();
+        }
+
+        public static String Concat(object arg0)
+            => arg0.ToString();
+
+        public static String Concat(object arg0, object arg1)
+            => new StringBuilder().Append(arg0).Append(arg1).ToString();
+
+        public static String Concat(object arg0, object arg1, object arg2)
+            => new StringBuilder().Append(arg0).Append(arg1).Append(arg2).ToString();
+
+        public static String Concat(object arg0, object arg1, object arg2, object arg3)
+            => new StringBuilder().Append(arg0).Append(arg1).Append(arg2).Append(arg3).ToString();
+
+        public static String Concat(params object[] args)
+        {
+            var sb = new StringBuilder();
+            for (int i = 0; i < args.Length; i++)
+                sb.Append(args[i]);
+            return sb.ToString();
+        }
+        //public static String Concat<T>(IEnumerable<T> values);
+        //public static String Concat(IEnumerable<String> values);
+
     }
 }

@@ -8,16 +8,24 @@ namespace SbcLibrary
 {
     public interface ISnippets
     {
-        Snippet GetY { get; }
-        Snippet Ldlen { get; }
-        Snippet StackPush { get; }
-        Snippet StackPop { get; }
-        Snippet StackPop2 { get; }
-        Snippet StackDup { get; }
-        Snippet StackDrop { get; }
-        Snippet StackGet { get; }
-        Snippet StackSet { get; }
-        Snippet MethodPreamble { get; }
-        Snippet MethodReturn { get; }
+        Action GetRX { get; }
+        Action GetRY { get; }
+        Action Ldlen { get; }
+        Action StackPush { get; }
+        Action StackPop { get; }
+        Action StackPop2 { get; }
+        Action StackPop3 { get; }
+        Action StackDup { get; }
+        Action StackDrop { get; }
+        Action StackGet { get; }
+        Action StackSet { get; }
+        Action MethodPreamble { get; }
+        Action MethodReturn { get; }
+        Action MFD { get; }
+        Action MBD { get; }
+        Action CopyFromFrameToStack(ArgData arg);
+        Action CopyFromStackToFrame(ArgData arg);
+        Action CopyFromMemoryToStack(TypeData type);
+        Action CopyFromStackToMemory(TypeData type);
     }
 }

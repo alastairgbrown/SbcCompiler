@@ -49,6 +49,10 @@
     <None Include="App.config" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\SbcCore\SbcCore.csproj">
+      <Project>{952144df-c517-4fd1-894b-a5eb097b37c7}</Project>
+      <Name>SbcCore</Name>
+    </ProjectReference>
     <ProjectReference Include="..\SbcLibrary\SbcLibrary.csproj">
       <Project>{9f71206a-2898-43fd-8972-992645e07b87}</Project>
       <Name>SbcLibrary</Name>

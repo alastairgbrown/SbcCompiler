@@ -38,14 +38,8 @@
             this.Output = new System.Windows.Forms.TextBox();
             this.MemoryTabPage = new System.Windows.Forms.TabPage();
             this.Memory = new System.Windows.Forms.DataGridView();
-            this.MemoryAddress = new System.Windows.Forms.DataGridViewTextBoxColumn();
-            this.MemoryValue = new System.Windows.Forms.DataGridViewTextBoxColumn();
-            this.MemoryName = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.FrameTabPage = new System.Windows.Forms.TabPage();
             this.Frame = new System.Windows.Forms.DataGridView();
-            this.FrameAddress = new System.Windows.Forms.DataGridViewTextBoxColumn();
-            this.FrameValue = new System.Windows.Forms.DataGridViewTextBoxColumn();
-            this.FrameName = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.TabControl = new System.Windows.Forms.TabControl();
             this.MenuStrip = new System.Windows.Forms.MenuStrip();
             this.RunMenuItem = new System.Windows.Forms.ToolStripMenuItem();
@@ -64,6 +58,12 @@
             this.toolStripSeparator2 = new System.Windows.Forms.ToolStripSeparator();
             this.MethodsMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.Status = new System.Windows.Forms.ToolStripMenuItem();
+            this.FrameAddress = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.FrameValue = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.FrameName = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.MemoryAddress = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.MemoryValue = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.MemoryName = new System.Windows.Forms.DataGridViewTextBoxColumn();
             ((System.ComponentModel.ISupportInitialize)(this.Registers)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.Code)).BeginInit();
             this.MemoryTabPage.SuspendLayout();
@@ -191,24 +191,6 @@
             this.Memory.CellPainting += new System.Windows.Forms.DataGridViewCellPaintingEventHandler(this.Memory_CellPainting);
             this.Memory.CellValueNeeded += new System.Windows.Forms.DataGridViewCellValueEventHandler(this.Memory_CellValueNeeded);
             // 
-            // MemoryAddress
-            // 
-            this.MemoryAddress.HeaderText = "Address";
-            this.MemoryAddress.Name = "MemoryAddress";
-            this.MemoryAddress.ReadOnly = true;
-            // 
-            // MemoryValue
-            // 
-            this.MemoryValue.HeaderText = "Value";
-            this.MemoryValue.Name = "MemoryValue";
-            this.MemoryValue.ReadOnly = true;
-            // 
-            // MemoryName
-            // 
-            this.MemoryName.HeaderText = "Name";
-            this.MemoryName.Name = "MemoryName";
-            this.MemoryName.ReadOnly = true;
-            // 
             // FrameTabPage
             // 
             this.FrameTabPage.Controls.Add(this.Frame);
@@ -242,24 +224,6 @@
             this.Frame.CellContentDoubleClick += new System.Windows.Forms.DataGridViewCellEventHandler(this.Memory_CellContentDoubleClick);
             this.Frame.CellPainting += new System.Windows.Forms.DataGridViewCellPaintingEventHandler(this.Memory_CellPainting);
             this.Frame.CellValueNeeded += new System.Windows.Forms.DataGridViewCellValueEventHandler(this.Memory_CellValueNeeded);
-            // 
-            // FrameAddress
-            // 
-            this.FrameAddress.HeaderText = "Frame";
-            this.FrameAddress.Name = "FrameAddress";
-            this.FrameAddress.ReadOnly = true;
-            // 
-            // FrameValue
-            // 
-            this.FrameValue.HeaderText = "Value";
-            this.FrameValue.Name = "FrameValue";
-            this.FrameValue.ReadOnly = true;
-            // 
-            // FrameName
-            // 
-            this.FrameName.HeaderText = "Name";
-            this.FrameName.Name = "FrameName";
-            this.FrameName.ReadOnly = true;
             // 
             // TabControl
             // 
@@ -434,6 +398,48 @@
             this.Status.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
             this.Status.Click += new System.EventHandler(this.Status_Click);
             // 
+            // FrameAddress
+            // 
+            this.FrameAddress.HeaderText = "Frame";
+            this.FrameAddress.Name = "FrameAddress";
+            this.FrameAddress.ReadOnly = true;
+            this.FrameAddress.Width = 50;
+            // 
+            // FrameValue
+            // 
+            this.FrameValue.HeaderText = "Value";
+            this.FrameValue.Name = "FrameValue";
+            this.FrameValue.ReadOnly = true;
+            this.FrameValue.Width = 50;
+            // 
+            // FrameName
+            // 
+            this.FrameName.HeaderText = "Name";
+            this.FrameName.Name = "FrameName";
+            this.FrameName.ReadOnly = true;
+            this.FrameName.Width = 200;
+            // 
+            // MemoryAddress
+            // 
+            this.MemoryAddress.HeaderText = "Address";
+            this.MemoryAddress.Name = "MemoryAddress";
+            this.MemoryAddress.ReadOnly = true;
+            this.MemoryAddress.Width = 50;
+            // 
+            // MemoryValue
+            // 
+            this.MemoryValue.HeaderText = "Value";
+            this.MemoryValue.Name = "MemoryValue";
+            this.MemoryValue.ReadOnly = true;
+            this.MemoryValue.Width = 50;
+            // 
+            // MemoryName
+            // 
+            this.MemoryName.HeaderText = "Name";
+            this.MemoryName.Name = "MemoryName";
+            this.MemoryName.ReadOnly = true;
+            this.MemoryName.Width = 200;
+            // 
             // EmulatorForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
@@ -474,15 +480,9 @@
         private System.Windows.Forms.DataGridViewTextBoxColumn CodeInfo;
         private System.Windows.Forms.TabPage MemoryTabPage;
         private System.Windows.Forms.DataGridView Memory;
-        private System.Windows.Forms.DataGridViewTextBoxColumn MemoryAddress;
-        private System.Windows.Forms.DataGridViewTextBoxColumn MemoryValue;
         private System.Windows.Forms.TabPage FrameTabPage;
         private System.Windows.Forms.DataGridView Frame;
-        private System.Windows.Forms.DataGridViewTextBoxColumn FrameAddress;
-        private System.Windows.Forms.DataGridViewTextBoxColumn FrameValue;
-        private System.Windows.Forms.DataGridViewTextBoxColumn FrameName;
         private System.Windows.Forms.TabControl TabControl;
-        private System.Windows.Forms.DataGridViewTextBoxColumn MemoryName;
         private System.Windows.Forms.MenuStrip MenuStrip;
         private System.Windows.Forms.ToolStripMenuItem RunMenuItem;
         private System.Windows.Forms.ToolStripMenuItem StepInMenuItem;
@@ -500,6 +500,12 @@
         private System.Windows.Forms.ToolStripSeparator toolStripSeparator2;
         private System.Windows.Forms.ToolStripMenuItem MethodsMenuItem;
         private System.Windows.Forms.ToolStripMenuItem RunToMenuItem;
+        private System.Windows.Forms.DataGridViewTextBoxColumn MemoryAddress;
+        private System.Windows.Forms.DataGridViewTextBoxColumn MemoryValue;
+        private System.Windows.Forms.DataGridViewTextBoxColumn MemoryName;
+        private System.Windows.Forms.DataGridViewTextBoxColumn FrameAddress;
+        private System.Windows.Forms.DataGridViewTextBoxColumn FrameValue;
+        private System.Windows.Forms.DataGridViewTextBoxColumn FrameName;
     }
 }
 

@@ -2,19 +2,18 @@
 
 namespace SbcCore
 {
-    [Implement("System.Object")]
+    [ImplementClass("System.Object")]
     public class System_Object
     {
-        [Implement("string System.Object::ToString()")]
-        public virtual string _ToString() => GetType().Name;
+        public virtual string ToString() => GetType().Name;
 
-        [Snippet("System.Type System.Object::GetType()")]
-        public static Snippet GetTypeObject => new Snippet((compiler, config)
-        => compiler.Emit(compiler.Snippets.StackGet, -1, Opcode.LDA, Opcode.LDA, -compiler.SizeOfClass("System.Type"), Opcode.AKA,
-                         compiler.Snippets.StackSet));
+        [Inline("System.Type System.Object::GetType()")]
+        public void GetTypeObject()
+        => Global.Emit(Global.Snippets.StackGet, -1, Opcode.LDA, -Global.Compiler.SizeOfClass("System.Type"), Opcode.AKA,
+                       Global.Snippets.StackSet);
 
-        [Snippet("void System.Object::.ctor()")]
-        public static Snippet Ctor => new Snippet((compiler, config)
-        => compiler.Emit(compiler.Snippets.StackDrop));
+        [Inline("void System.Object::.ctor()")]
+        public void Ctor()
+        => Global.Emit(Global.Snippets.StackDrop);
     }
 }

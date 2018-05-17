@@ -40,12 +40,17 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Implementations.cs" />
+    <Compile Include="System_GC.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Snippets.cs" />
     <Compile Include="System_Array.cs" />
+    <Compile Include="System_Char.cs" />
     <Compile Include="System_Collections_Generic_List.cs" />
+    <Compile Include="System_Collections_IEnumerator.cs" />
     <Compile Include="System_Console.cs" />
+    <Compile Include="System_Boolean.cs" />
+    <Compile Include="System_Diagnostics_Debugger.cs" />
+    <Compile Include="System_Diagnostics_Debug.cs" />
     <Compile Include="System_Int32.cs" />
     <Compile Include="System_Object.cs" />
     <Compile Include="System_String.cs" />

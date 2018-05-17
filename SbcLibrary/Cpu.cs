@@ -96,19 +96,16 @@ namespace SbcLibrary
         public int InstructionStepCount { get; set; }
 
         public Config Config { get; set; }
+        public int[] Memory { get; set; }
+        public Dictionary<int, Action> Opcodes { get; }
 
         public Cpu()
-        {
-            Opcodes = GetType().GetMethods()
+        => Opcodes = GetType().GetMethods()
                     .SelectMany(m => m.GetCustomAttributes(false).OfType<OpcodeAttribute>()
-                                      .Select(oc => new { Method = m, oc.Opcode }))
+                                      .Select(oc => new { oc.Opcode, Method = m }))
                     .ToDictionary(oc => (int)oc.Opcode, oc => (Action)oc.Method.CreateDelegate(typeof(Action), this));
-        }
 
         public static readonly Dictionary<string, PropertyInfo> RegisterProps = typeof(Cpu).GetProperties().Where(m => m.GetCustomAttributes(false).OfType<RegisterAttribute>().Any()).ToDictionary(r => r.Name);
-        public static readonly Dictionary<string, PropertyInfo> ConfigProps = typeof(Config).GetProperties().ToDictionary(r => r.Name);
-
-        public Dictionary<int,Action> Opcodes { get; }
 
         public int BitsPerSlot => Config.BitsPerMemoryUnit / Config.SlotsPerMemoryUnit;
         public int BitsPerMemoryUnit => Config.BitsPerMemoryUnit;
@@ -126,7 +123,10 @@ namespace SbcLibrary
         {
             for (InstructionStepCount = 0; InstructionStepCount < Config.StepsPerRun; InstructionStepCount++)
             {
-                Opcodes[CurrentOpcode]();
+                if (!Opcodes.TryGetValue(CurrentOpcode, out var action))
+                    throw new Exception($"Can't execute {(Opcode)CurrentOpcode} ({CurrentOpcode})");
+
+                action();
 
                 if (stop())
                 {
@@ -477,6 +477,9 @@ namespace SbcLibrary
             RX += RK;
             RK = PF = EF = 0;
             PC += (SLOT = (SLOT + 1) % SlotsPerMemoryUnit) == 0 ? 1 : 0;
+
+            if (RX < Config.StackStart || (RX > RY && RY > 0))
+                throw new Exception("Stack underflow/overflow");
         }
         [Opcode(Opcode.AKY)]
         public void AKY()
@@ -616,30 +619,6 @@ namespace SbcLibrary
 
         /// <summary>
         /// /****************************************************************************/
-        /// ADC      0x01              Signed Add RB to RA with carry in and out
-        /// /----------------------------------------------------------------------------/
-        /// RA' = $signed(RB) + $signed(RA) + cf
-        /// RB' = unchanged
-        /// RC' = unchanged
-        /// RX' = unchanged
-        /// RK' = 0
-        /// PC' = $next_address
-        /// SLOT' = $next_address
-        /// pf' = 0
-        /// cf' = carry out
-        /// ef' = 0
-        /// sf' = 0
-        /// </summary>
-        [Opcode(Opcode.ADC)]
-        public void ADC()
-        {
-            RA += RB + CF;
-            RK = PF = EF = 0;
-            PC += (SLOT = (SLOT + 1) % SlotsPerMemoryUnit) == 0 ? 1 : 0;
-        }
-
-        /// <summary>
-        /// /****************************************************************************/
         /// SUB      0x02              Signed Subtract RB from RA with carry out
         /// /----------------------------------------------------------------------------/
         /// RA' = $signed(RB) + $signed(~RA) + 1
@@ -762,25 +741,52 @@ namespace SbcLibrary
 
         /// <summary>
         /// /****************************************************************************/
-        /// LSR      0x07              Signed logical bitwise shift right with carry
+        /// SHR 0x38 Full barrel shift right RA >> RB
         /// /----------------------------------------------------------------------------/
-        /// RA' = (RA &gt;&gt; 1)
-        /// RB' = unchanged
+        /// RA' = RA >> RB
+        /// RB' = RC
         /// RC' = unchanged
         /// RX' = unchanged
+        /// RY' = unchanged
         /// RK' = 0
         /// PC' = $next_address
         /// SLOT' = $next_address
         /// pf' = 0
-        /// cf' = $lsb(RA)
+        /// cf' = unchanged
         /// ef' = 0
-        /// sf' = 0
+        /// irqf' = unchanged
         /// </summary>
-        [Opcode(Opcode.LSR)]
-        public void LSR()
+        [Opcode(Opcode.SHR)]
+        public void SHR()
         {
-            CF = RA & 1;
-            RA = RA >> 1;
+            RA = RA >> RB;
+            RB = RC;
+            RK = PF = EF = 0;
+            PC += (SLOT = (SLOT + 1) % SlotsPerMemoryUnit) == 0 ? 1 : 0;
+        }
+
+        /// <summary>
+        /// /****************************************************************************/
+        /// SHL 0x39 Full barrel shift left RA << RB
+        /// /----------------------------------------------------------------------------/
+        /// RA' = RA << RB
+        /// RB' = RC
+        /// RC' = unchanged
+        /// RX' = unchanged
+        /// RY' = unchanged
+        /// RK' = 0
+        /// PC' = $next_address
+        /// SLOT' = $next_address
+        /// pf' = 0
+        /// cf' = unchanged
+        /// ef' = 0
+        /// irqf' = unchanged
+        /// </summary>
+        [Opcode(Opcode.SHL)]
+        public void SHL()
+        {
+            RA = RA << RB;
+            RB = RC;
             RK = PF = EF = 0;
             PC += (SLOT = (SLOT + 1) % SlotsPerMemoryUnit) == 0 ? 1 : 0;
         }
@@ -835,6 +841,58 @@ namespace SbcLibrary
 
         /// <summary>
         /// /****************************************************************************/
+        /// MFD 0x2B Move forward data from $mem(RC++) = $mem(RB++); RA--;
+        /// /----------------------------------------------------------------------------/
+        /// RA' = RA--
+        /// RB' = RB++
+        /// RC' = RC++
+        /// RX' = unchanged
+        /// RY' = unchanged
+        /// RK' = 0
+        /// PC' = $next_address
+        /// SLOT' = $next_address
+        /// pf' = 0
+        /// cf' = unchanged
+        /// ef' = 0
+        /// irqf' = unchanged
+        /// </summary>
+        [Opcode(Opcode.MFD)]
+        public void MFD()
+        {
+            Memory[RC++] = Memory[RB++];
+            RA--;
+            RK = PF = EF = 0;
+            PC += (SLOT = (SLOT + 1) % SlotsPerMemoryUnit) == 0 ? 1 : 0;
+        }
+
+        /// <summary>
+        /// /****************************************************************************/
+        /// MBD 0x2C Move backward data from $mem(RC--) = $mem(RB--); RA--;
+        /// /----------------------------------------------------------------------------/
+        /// RA' = RA--
+        /// RB' = RB--
+        /// RC' = RC--
+        /// RX' = unchanged
+        /// RY' = unchanged
+        /// RK' = 0
+        /// PC' = $next_address
+        /// SLOT' = $next_address
+        /// pf' = 0
+        /// cf' = unchanged
+        /// ef' = 0
+        /// irqf' = unchanged
+        /// </summary>
+        [Opcode(Opcode.MBD)]
+        public void MBD()
+        {
+            Memory[RC--] = Memory[RB--];
+            RA--;
+            RK = PF = EF = 0;
+            PC += (SLOT = (SLOT + 1) % SlotsPerMemoryUnit) == 0 ? 1 : 0;
+        }
+
+        /// <summary>
+        /// /****************************************************************************/
         /// IRQ      0x0A              push IRQ return address
         /// /----------------------------------------------------------------------------/
         /// RA' = RI
@@ -855,8 +913,6 @@ namespace SbcLibrary
         {
             PC += (SLOT = (SLOT + 1) % SlotsPerMemoryUnit) == 0 ? 1 : 0;
         }
-
-        public int[] Memory { get; set; }
 
         [AttributeUsage(AttributeTargets.All, AllowMultiple = true)]
         private class OpcodeAttribute : Attribute
