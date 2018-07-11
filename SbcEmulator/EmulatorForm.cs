@@ -21,8 +21,11 @@ namespace SbcEmulator
         public List<CodeLine> CodeLines { get; set; }
         public List<RegisterValue> RegisterValues { get; } = new List<RegisterValue>();
         public AddressSlot[] AddressesByAddrIdx { get; set; } = new AddressSlot[0];
-        public string[] FrameNames { get; set; } = new string[0];
+        public FrameItem[] FrameItems { get; set; } = new FrameItem[0];
         public List<MethodData> CallStack { get; } = new List<MethodData>();
+        public string GetStackType(int x)
+            => Compilation.ExecutableLines.TryGetValue(Cpu.CurrentAddrIdx, out var source) && source.Stack != null && x < source.Stack.Length
+                    ? source.Stack[x] : null;
 
         public EmulatorForm(string[] args)
         {
@@ -53,7 +56,8 @@ namespace SbcEmulator
             Cpu = new Cpu { Config = Config, PC = Config.MainEntryPoint };
             Cpu.OnSetMemory += Cpu_OnSetMemory;
 
-            SourceLines = Compilation.ExecutableLines.Select(l => new CodeLine { AddrIdx = l.Key, Line = l.Value }).ToList();
+            SourceLines = Compilation.ExecutableLines.Select(l => new CodeLine { AddrIdx = l.Key, Line = l.Value.Source, IsMethod = l.Value.IsMethod })
+                                                     .ToList();
 
             var start = Config.ExecutableStart * Cpu.SlotsPerMemoryUnit;
             var size = Config.ExecutableSize * Cpu.SlotsPerMemoryUnit;
@@ -80,7 +84,7 @@ namespace SbcEmulator
 
             foreach (var rv in Cpu.RegisterProps)
             {
-                int? f(Cpu cpu) => (int)rv.Value.GetValue(cpu);
+                object f(Cpu cpu) => rv.Value.GetValue(cpu);
                 RegisterValues.Add(new RegisterValue { Name = rv.Key, ValueFunc = f });
             }
 
@@ -89,7 +93,11 @@ namespace SbcEmulator
             for (int i = 0; i < 10; i++)
             {
                 int x = i;
-                int? f(Cpu cpu) => cpu.RX - x > Config.StackStart && cpu.RX - x < Config.StackStart + Config.StackStart ? cpu.Memory[cpu.RX - x] : (int?)null;
+                object f(Cpu cpu) => cpu.RX - x <= Config.StackStart || cpu.RX - x >= Config.StackStart + Config.StackStart
+                                        ? null
+                                        : GetStackType(x) == "System.Single"
+                                            ? (object)new Cpu.RegisterValue(cpu.Memory[cpu.RX - x]).Float
+                                            : (object)cpu.Memory[cpu.RX - x];
                 RegisterValues.Add(new RegisterValue { Name = "Stack", ValueFunc = f });
             }
 
@@ -101,7 +109,7 @@ namespace SbcEmulator
 
         private void Restart()
         {
-            Cpu.RegisterProps.Values.ToList().ForEach(p => p.SetValue(Cpu, 0));
+            Cpu.RegisterProps.Values.ToList().ForEach(p => p.SetValue(Cpu, Activator.CreateInstance(p.PropertyType)));
             Cpu.Memory = Compilation.GetInitialMemory();
 
             LastCpu = new Cpu { Memory = Cpu.Memory.ToArray() };
@@ -111,23 +119,45 @@ namespace SbcEmulator
             Output.Text = "";
 
             RefreshCode();
-            RefreshMethodMenu();
+            RefreshMenus();
         }
 
-        private void RefreshMethodMenu()
+        private void RefreshMenus()
         {
-            MethodsMenuItem.DropDownItems.Clear();
+            var classMethods = Compilation.MethodData.ToLookup(md => md.ClassName);
+            var nameSpaces = Compilation.ClassData.Cast<MetadataBase>()
+                                        .Concat(Compilation.MethodData.Cast<MetadataBase>())
+                                        .OrderBy(i => i.NameSpace).ThenBy(i => i.ClassName)
+                                        .GroupBy(i => i.NameSpace)
+                                        .ToDictionary(
+                                            g => g.Key, 
+                                            g => g.GroupBy(i => i.ClassName).ToDictionary(c => c.Key, c => c.ToArray()));
 
-            foreach (var className in Compilation.MethodData.OrderBy(m => m.ClassName).GroupBy(m => m.ClassName))
+            ClassesMenuItem.DropDownItems.Clear();
+
+            foreach (var nameSpace in nameSpaces)
             {
-                var classMenu = new ToolStripMenuItem(className.Key);
+                var nameSpaceMenu = new ToolStripMenuItem(nameSpace.Key);
 
-                MethodsMenuItem.DropDownItems.Add(classMenu);
+                ClassesMenuItem.DropDownItems.Add(nameSpaceMenu);
 
-                foreach (var method in className.OrderBy(m => m.Signature))
+                foreach (var className in nameSpace.Value)
                 {
-                    classMenu.DropDownItems.Add(
-                        new ToolStripMenuItem(method.Signature, null, (s, e) => SelectAddrIdx(method.AddrIdx)));
+                    var classMenu = new ToolStripMenuItem(className.Key.Substring(nameSpace.Key.Length+1));
+
+                    nameSpaceMenu.DropDownItems.Add(classMenu);
+
+                    foreach (var classData in className.Value.OfType<ClassData>())
+                    {
+                        classMenu.DropDownItems.Add(
+                            new ToolStripMenuItem("Class", null, (s, e) => SelectAddress(classData.Address)));
+                    }
+
+                    foreach (var method in className.Value.OfType<MethodData>().OrderBy(cd => cd.Signature))
+                    {
+                        classMenu.DropDownItems.Add(
+                            new ToolStripMenuItem(method.Signature, null, (s, e) => SelectAddrIdx(method.AddrIdx)));
+                    }
                 }
             }
         }
@@ -137,6 +167,9 @@ namespace SbcEmulator
             if (e.Key == Config.OutputAddress)
             {
                 Output.Text += (char)e.Value;
+                Output.SelectionLength = 0;
+                Output.SelectionStart = Output.Text.Length;
+                Output.ScrollToCaret();
                 return;
             }
 
@@ -162,8 +195,14 @@ namespace SbcEmulator
             }
         }
 
-        public string DisplayNumber(int number)
-            => Dec.Checked ? $"{number}" : $"{number:X}";
+        public string DisplayNumber(object value)
+            => value is Cpu.RegisterValue register
+                 ? DisplayNumber(register.Value)
+                 : value is float 
+                    ? $"{value}f"
+                    : (Hex.Checked && value is int 
+                        ? $"{value:X}" 
+                        : $"{value ?? '-'}");
 
         public string DisplayAddrSlot(int addrSlot)
             => $"{DisplayNumber(Config.AddrSlotToAddr(addrSlot))}.{Config.AddrSlotToSlot(addrSlot)}";
@@ -206,7 +245,7 @@ namespace SbcEmulator
                     opcode = (Opcode)cpu.CurrentOpcode;
                     codeline.Range += i - codeline.AddrIdx;
 
-                    if (opcode == Opcode.JPZ || opcode == Opcode.JMP)
+                    if (opcode == Opcode.JPZ || opcode == Opcode.JMP || (opcode == Opcode.PSH && (Opcode)cpu.OpCodeAt(i + 1) == Opcode.JSR))
                         codeline.Line = $"{DisplayAddrSlot(cpu.RK)} {opcode}";
                     else
                         codeline.Line = $"{DisplayNumber(cpu.RK)} {opcode}";
@@ -230,7 +269,9 @@ namespace SbcEmulator
                 }
             }
 
+            Code.SuspendLayout();
             Code.RowCount = CodeLines.Count;
+            Code.ResumeLayout();
             Code.Invalidate();
             RefreshState();
 
@@ -266,6 +307,21 @@ namespace SbcEmulator
             {
                 e.Value = line.Line;
             }
+        }
+
+
+        private void Code_CellPainting(object sender, DataGridViewCellPaintingEventArgs e)
+        {
+            if (e.RowIndex < 0)
+                return;
+
+            var line = CodeLines[e.RowIndex];
+
+            if (line.IsMethod)
+                e.CellStyle.BackColor = Color.Yellow;
+
+            if (!AsmDetail.Checked && line.Range > 0)
+                e.CellStyle.ForeColor = Color.Blue;
         }
 
         private void Run(Func<bool> stop)
@@ -306,7 +362,7 @@ namespace SbcEmulator
             var framePointer = Cpu.RY;
             var frameSize = framePointer > stackStart && framePointer < stackStop ? stackStop - framePointer : 1;
 
-            FrameNames = new string[frameSize];
+            FrameItems = new FrameItem[frameSize];
             CallStack.Clear();
 
             for (int i = 0; i < frameSize;)
@@ -321,13 +377,13 @@ namespace SbcEmulator
                 var method = AddressesByAddrIdx[addrIdx].Method;
 
                 CallStack.Add(method);
-                Array.Copy(method.FrameItems, 0, FrameNames, i, Math.Min(method.FrameItems.Length, frameSize - i));
+                Array.Copy(method.FrameItems, 0, FrameItems, i, Math.Min(method.FrameItems.Length, frameSize - i));
 
                 i += method.FrameItems.Length;
             }
 
             Frame.Tag = framePointer;
-            Frame.RowCount = FrameNames.Length;
+            Frame.RowCount = FrameItems.Length;
         }
 
         private void Run_Click(object sender, EventArgs e)
@@ -380,6 +436,7 @@ namespace SbcEmulator
         private void Memory_CellValueNeeded(object sender, DataGridViewCellValueEventArgs e)
         {
             var address = (int)((DataGridView)sender).Tag + e.RowIndex;
+            var item = sender == Frame && e.RowIndex < FrameItems?.Length ? FrameItems[e.RowIndex] : null;
 
             if (e.ColumnIndex == MemoryAddress.Index)
             {
@@ -387,14 +444,26 @@ namespace SbcEmulator
             }
             else if (e.ColumnIndex == MemoryValue.Index)
             {
+                var value = Cpu.Memory[address];
+
                 if (IsAddressPointingToCode(address))
-                    e.Value = DisplayAddrSlot(Cpu.Memory[address]);
+                    e.Value = DisplayAddrSlot(value);
+                else if (item != null && item?.Type == "System.Single")
+                    e.Value = DisplayNumber(new Cpu.RegisterValue(value).Float);
                 else
-                    e.Value = DisplayNumber(Cpu.Memory[address]);
+                    e.Value = DisplayNumber(value);
             }
-            else if (e.ColumnIndex == FrameName.Index && sender == Frame && e.RowIndex < FrameNames?.Length)
+            else if (e.ColumnIndex == FrameCat.Index && item != null)
             {
-                e.Value = FrameNames[e.RowIndex];
+                e.Value = item.Cat;
+            }
+            else if (e.ColumnIndex == FrameName.Index && item != null)
+            {
+                e.Value = item.Name;
+            }
+            else if (e.ColumnIndex == FrameType.Index && item != null)
+            {
+                e.Value = item.Type;
             }
             else if (e.ColumnIndex == MemoryName.Index && sender == Memory && Compilation.AddressLabels.TryGetValue(address, out var label))
             {
@@ -404,7 +473,7 @@ namespace SbcEmulator
 
         bool IsAddressPointingToCode(int address)
             => (address - Cpu.RY is var row &&
-                row >= 0 && row < FrameNames.Length && FrameNames[row]?.StartsWith("M:") == true) ||
+                row >= 0 && row < FrameItems.Length && FrameItems[row]?.Cat == "M") ||
                 Compilation.AddressLabels.TryGetValue(address, out var label) && label.StartsWith("M:");
 
         private void Memory_CellContentDoubleClick(object sender, DataGridViewCellEventArgs e)
@@ -459,8 +528,8 @@ namespace SbcEmulator
             }
             else if (e.ColumnIndex == RegisterValue.Index)
             {
-                int? value = RegisterValues[e.RowIndex].GetValue(Cpu);
-                e.Value = value == null ? "-" : DisplayNumber(value.Value);
+                object value = RegisterValues[e.RowIndex].GetValue(Cpu);
+                e.Value = DisplayNumber(value);
             }
         }
 
@@ -468,10 +537,10 @@ namespace SbcEmulator
         {
             if (e.RowIndex >= 0 && e.ColumnIndex == RegisterValue.Index)
             {
-                int? value = RegisterValues[e.RowIndex].GetValue(Cpu);
-                int? lastValue = RegisterValues[e.RowIndex].GetValue(LastCpu);
+                object value = RegisterValues[e.RowIndex].GetValue(Cpu);
+                object lastValue = RegisterValues[e.RowIndex].GetValue(LastCpu);
 
-                if (value != lastValue)
+                if (DisplayNumber(value) != DisplayNumber(lastValue))
                 {
                     e.CellStyle.ForeColor = Color.Red;
                 }
@@ -520,7 +589,12 @@ namespace SbcEmulator
             }
             else if (e.ColumnIndex == RegisterValue.Index)
             {
-                SelectAddress(RegisterValues[e.RowIndex].GetValue(Cpu) ?? -1);
+                var value = RegisterValues[e.RowIndex].GetValue(Cpu);
+
+                if (value is int integer)
+                    SelectAddress(integer);
+                else if (value is Cpu.RegisterValue register && !register.IsFloat)
+                    SelectAddress(register.Int);
             }
         }
 
@@ -555,8 +629,8 @@ namespace SbcEmulator
     public class RegisterValue
     {
         public string Name { get; set; }
-        public Func<Cpu, int?> ValueFunc { get; set; }
-        public int? GetValue(Cpu cpu)
+        public Func<Cpu, object> ValueFunc { get; set; }
+        public object GetValue(Cpu cpu)
         {
             try { return ValueFunc(cpu); }
             catch { return null; }
@@ -569,6 +643,7 @@ namespace SbcEmulator
         public int Range { get; set; }
         public int Index { get; internal set; }
         public string Line { get; set; }
+        public bool IsMethod { get; set; }
     }
 
     public struct AddressSlot

@@ -1,13 +1,9 @@
 ﻿using SbcLibrary;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using System.Diagnostics;
 
 namespace SbcCore
 {
-    [ImplementClass("System.Diagnostics.Debugger")]
+    [ImplementClass(typeof(Debugger))]
     public static class System_Diagnostics_Debugger
     {
         [Inline]

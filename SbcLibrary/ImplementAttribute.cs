@@ -5,8 +5,8 @@ namespace SbcLibrary
     [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct | AttributeTargets.Interface)]
     public class ImplementClassAttribute : Attribute
     {
-        public string Name { get; }
+        public Type Type { get; }
 
-        public ImplementClassAttribute(string name) => Name = name;
+        public ImplementClassAttribute(Type type) => Type = type;
     }
 }

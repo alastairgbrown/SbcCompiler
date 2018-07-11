@@ -1,19 +1,24 @@
 ﻿using SbcLibrary;
 using System;
+using System.Text;
 
 namespace SbcCore
 {
-    [ImplementClass("System.Text.StringBuilder")]
+    [ImplementClass(typeof(StringBuilder))]
     public class System_Text_StringBuilder
     {
         private int _length;
         private char[] _data;
 
-        public System_Text_StringBuilder()
-            => _data = new char[Global.Config.HeapGranularity - 2];
-
-        public System_Text_StringBuilder(int capacity)
-            => _data = new char[capacity];
+        public System_Text_StringBuilder() => _data = new char[Global.Config.HeapGranularity - 2];
+        public System_Text_StringBuilder(int capacity) => _data = new char[capacity];
+        public override string ToString() => new string(_data, 0, _length);
+        public int Length => _length;
+        public char get_Chars(int index) => _data[index];
+        public string Detach() => _data.ConvertToString(_length);
+        public System_Text_StringBuilder Append(object text) => Append(text.ToString());
+        public System_Text_StringBuilder Append(int text) => Append(text.ToString());
+        public System_Text_StringBuilder Append(string text) => Append(text, 0, text.Length);
 
         public System_Text_StringBuilder AppendFormat(string format, params object[] args)
         {
@@ -46,27 +51,53 @@ namespace SbcCore
             return this;
         }
 
-        public System_Text_StringBuilder Append(object text)
-            => Append(text.ToString());
+        public char this[int index]
+        {
+            get => _data[index];
+            set => _data[index] = value;
+        }
 
-        public System_Text_StringBuilder Append(string text)
-            => Append(text, 0, text.Length);
+        public System_Text_StringBuilder Append(char text)
+        {
+            EnsureCapacity(_length + 1);
+            _data[_length++] = text;
+            return this;
+        }
+
+
+        private void EnsureCapacity(int size)
+        {
+            if (_data.Length < size)
+            {
+                var oldData = _data;
+                _data = new char[_data.Length * 2 < size ? size : _data.Length * 2];
+                Array.Copy(oldData, 0, _data, 0, oldData.Length);
+            }
+        }
 
         public System_Text_StringBuilder Append(string text, int index, int length)
         {
-            if (_data.Length < _length + length)
-            {
-                var oldData = _data;
-                _data = new char[_data.Length * 2 + length];
-                Array.Copy(oldData, 0, _data, 0, oldData.Length);
-            }
+            EnsureCapacity(_length + length);
 
             System_Array.Copy(text, index, _data, _length, length);
             _length += length;
             return this;
         }
 
-        public override string ToString()
-            => new string(_data, 0, _length);
+        public System_Text_StringBuilder Remove(int index, int count)
+        {
+            if (count > 0)
+            {
+                int i = _length;
+                _length -= count;
+                if (index < _length)
+                {
+                    Array.Copy(_data, index + count, _data, index, _length - index);
+                }
+                Array.Clear(_data, _length, count);
+            }
+
+            return this;
+        }
     }
 }

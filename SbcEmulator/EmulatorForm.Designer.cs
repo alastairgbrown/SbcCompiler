@@ -38,8 +38,16 @@
             this.Output = new System.Windows.Forms.TextBox();
             this.MemoryTabPage = new System.Windows.Forms.TabPage();
             this.Memory = new System.Windows.Forms.DataGridView();
+            this.MemoryAddress = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.MemoryValue = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.MemoryName = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.FrameTabPage = new System.Windows.Forms.TabPage();
             this.Frame = new System.Windows.Forms.DataGridView();
+            this.FrameAddress = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.FrameValue = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.FrameCat = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.FrameName = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.FrameType = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.TabControl = new System.Windows.Forms.TabControl();
             this.MenuStrip = new System.Windows.Forms.MenuStrip();
             this.RunMenuItem = new System.Windows.Forms.ToolStripMenuItem();
@@ -56,14 +64,11 @@
             this.Hex = new System.Windows.Forms.ToolStripMenuItem();
             this.Dec = new System.Windows.Forms.ToolStripMenuItem();
             this.toolStripSeparator2 = new System.Windows.Forms.ToolStripSeparator();
-            this.MethodsMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.ClassesMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.Status = new System.Windows.Forms.ToolStripMenuItem();
-            this.FrameAddress = new System.Windows.Forms.DataGridViewTextBoxColumn();
-            this.FrameValue = new System.Windows.Forms.DataGridViewTextBoxColumn();
-            this.FrameName = new System.Windows.Forms.DataGridViewTextBoxColumn();
-            this.MemoryAddress = new System.Windows.Forms.DataGridViewTextBoxColumn();
-            this.MemoryValue = new System.Windows.Forms.DataGridViewTextBoxColumn();
-            this.MemoryName = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.splitContainer1 = new System.Windows.Forms.SplitContainer();
+            this.splitContainer2 = new System.Windows.Forms.SplitContainer();
+            this.splitContainer3 = new System.Windows.Forms.SplitContainer();
             ((System.ComponentModel.ISupportInitialize)(this.Registers)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.Code)).BeginInit();
             this.MemoryTabPage.SuspendLayout();
@@ -72,23 +77,36 @@
             ((System.ComponentModel.ISupportInitialize)(this.Frame)).BeginInit();
             this.TabControl.SuspendLayout();
             this.MenuStrip.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.splitContainer1)).BeginInit();
+            this.splitContainer1.Panel1.SuspendLayout();
+            this.splitContainer1.Panel2.SuspendLayout();
+            this.splitContainer1.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.splitContainer2)).BeginInit();
+            this.splitContainer2.Panel1.SuspendLayout();
+            this.splitContainer2.Panel2.SuspendLayout();
+            this.splitContainer2.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.splitContainer3)).BeginInit();
+            this.splitContainer3.Panel1.SuspendLayout();
+            this.splitContainer3.Panel2.SuspendLayout();
+            this.splitContainer3.SuspendLayout();
             this.SuspendLayout();
             // 
             // Registers
             // 
             this.Registers.AllowUserToAddRows = false;
             this.Registers.AllowUserToDeleteRows = false;
-            this.Registers.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
-            | System.Windows.Forms.AnchorStyles.Left)));
+            this.Registers.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
+            | System.Windows.Forms.AnchorStyles.Left) 
+            | System.Windows.Forms.AnchorStyles.Right)));
             this.Registers.ColumnHeadersHeightSizeMode = System.Windows.Forms.DataGridViewColumnHeadersHeightSizeMode.AutoSize;
             this.Registers.Columns.AddRange(new System.Windows.Forms.DataGridViewColumn[] {
             this.RegisterName,
             this.RegisterValue});
-            this.Registers.Location = new System.Drawing.Point(0, 23);
+            this.Registers.Location = new System.Drawing.Point(0, 3);
             this.Registers.Name = "Registers";
             this.Registers.ReadOnly = true;
             this.Registers.RowHeadersVisible = false;
-            this.Registers.Size = new System.Drawing.Size(240, 296);
+            this.Registers.Size = new System.Drawing.Size(243, 294);
             this.Registers.TabIndex = 0;
             this.Registers.VirtualMode = true;
             this.Registers.CellContentDoubleClick += new System.Windows.Forms.DataGridViewCellEventHandler(this.Registers_CellContentDoubleClick);
@@ -114,20 +132,23 @@
             this.Code.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
             | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
+            this.Code.BorderStyle = System.Windows.Forms.BorderStyle.None;
+            this.Code.CellBorderStyle = System.Windows.Forms.DataGridViewCellBorderStyle.None;
             this.Code.ColumnHeadersHeightSizeMode = System.Windows.Forms.DataGridViewColumnHeadersHeightSizeMode.AutoSize;
             this.Code.Columns.AddRange(new System.Windows.Forms.DataGridViewColumn[] {
             this.CodeBreakpoint,
             this.CodeAddress,
             this.CodeInfo});
-            this.Code.Location = new System.Drawing.Point(246, 28);
+            this.Code.Location = new System.Drawing.Point(2, 0);
             this.Code.MultiSelect = false;
             this.Code.Name = "Code";
             this.Code.ReadOnly = true;
             this.Code.RowHeadersVisible = false;
-            this.Code.Size = new System.Drawing.Size(407, 400);
+            this.Code.Size = new System.Drawing.Size(481, 402);
             this.Code.TabIndex = 0;
             this.Code.VirtualMode = true;
             this.Code.CellClick += new System.Windows.Forms.DataGridViewCellEventHandler(this.Code_CellClick);
+            this.Code.CellPainting += new System.Windows.Forms.DataGridViewCellPaintingEventHandler(this.Code_CellPainting);
             this.Code.CellValueNeeded += new System.Windows.Forms.DataGridViewCellValueEventHandler(this.Code_CellValueNeeded);
             // 
             // CodeBreakpoint
@@ -150,11 +171,14 @@
             // 
             // Output
             // 
-            this.Output.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
-            this.Output.Location = new System.Drawing.Point(0, 325);
+            this.Output.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
+            | System.Windows.Forms.AnchorStyles.Left) 
+            | System.Windows.Forms.AnchorStyles.Right)));
+            this.Output.Location = new System.Drawing.Point(0, -1);
             this.Output.Multiline = true;
             this.Output.Name = "Output";
-            this.Output.Size = new System.Drawing.Size(240, 99);
+            this.Output.ScrollBars = System.Windows.Forms.ScrollBars.Vertical;
+            this.Output.Size = new System.Drawing.Size(243, 99);
             this.Output.TabIndex = 2;
             // 
             // MemoryTabPage
@@ -191,13 +215,34 @@
             this.Memory.CellPainting += new System.Windows.Forms.DataGridViewCellPaintingEventHandler(this.Memory_CellPainting);
             this.Memory.CellValueNeeded += new System.Windows.Forms.DataGridViewCellValueEventHandler(this.Memory_CellValueNeeded);
             // 
+            // MemoryAddress
+            // 
+            this.MemoryAddress.HeaderText = "Address";
+            this.MemoryAddress.Name = "MemoryAddress";
+            this.MemoryAddress.ReadOnly = true;
+            this.MemoryAddress.Width = 50;
+            // 
+            // MemoryValue
+            // 
+            this.MemoryValue.HeaderText = "Value";
+            this.MemoryValue.Name = "MemoryValue";
+            this.MemoryValue.ReadOnly = true;
+            this.MemoryValue.Width = 50;
+            // 
+            // MemoryName
+            // 
+            this.MemoryName.HeaderText = "Name";
+            this.MemoryName.Name = "MemoryName";
+            this.MemoryName.ReadOnly = true;
+            this.MemoryName.Width = 200;
+            // 
             // FrameTabPage
             // 
             this.FrameTabPage.Controls.Add(this.Frame);
             this.FrameTabPage.Location = new System.Drawing.Point(4, 22);
             this.FrameTabPage.Name = "FrameTabPage";
             this.FrameTabPage.Padding = new System.Windows.Forms.Padding(3);
-            this.FrameTabPage.Size = new System.Drawing.Size(340, 373);
+            this.FrameTabPage.Size = new System.Drawing.Size(276, 373);
             this.FrameTabPage.TabIndex = 1;
             this.FrameTabPage.Text = "Frame";
             this.FrameTabPage.UseVisualStyleBackColor = true;
@@ -206,35 +251,70 @@
             // 
             this.Frame.AllowUserToAddRows = false;
             this.Frame.AllowUserToDeleteRows = false;
-            this.Frame.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
-            | System.Windows.Forms.AnchorStyles.Left) 
-            | System.Windows.Forms.AnchorStyles.Right)));
             this.Frame.ColumnHeadersHeightSizeMode = System.Windows.Forms.DataGridViewColumnHeadersHeightSizeMode.AutoSize;
             this.Frame.Columns.AddRange(new System.Windows.Forms.DataGridViewColumn[] {
             this.FrameAddress,
             this.FrameValue,
-            this.FrameName});
-            this.Frame.Location = new System.Drawing.Point(-4, 0);
+            this.FrameCat,
+            this.FrameName,
+            this.FrameType});
+            this.Frame.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.Frame.Location = new System.Drawing.Point(3, 3);
             this.Frame.Name = "Frame";
             this.Frame.ReadOnly = true;
             this.Frame.RowHeadersVisible = false;
-            this.Frame.Size = new System.Drawing.Size(344, 377);
+            this.Frame.Size = new System.Drawing.Size(270, 367);
             this.Frame.TabIndex = 3;
             this.Frame.VirtualMode = true;
             this.Frame.CellContentDoubleClick += new System.Windows.Forms.DataGridViewCellEventHandler(this.Memory_CellContentDoubleClick);
             this.Frame.CellPainting += new System.Windows.Forms.DataGridViewCellPaintingEventHandler(this.Memory_CellPainting);
             this.Frame.CellValueNeeded += new System.Windows.Forms.DataGridViewCellValueEventHandler(this.Memory_CellValueNeeded);
             // 
+            // FrameAddress
+            // 
+            this.FrameAddress.HeaderText = "Frame";
+            this.FrameAddress.Name = "FrameAddress";
+            this.FrameAddress.ReadOnly = true;
+            this.FrameAddress.Width = 50;
+            // 
+            // FrameValue
+            // 
+            this.FrameValue.HeaderText = "Value";
+            this.FrameValue.Name = "FrameValue";
+            this.FrameValue.ReadOnly = true;
+            this.FrameValue.Width = 50;
+            // 
+            // FrameCat
+            // 
+            this.FrameCat.HeaderText = "";
+            this.FrameCat.Name = "FrameCat";
+            this.FrameCat.ReadOnly = true;
+            this.FrameCat.Width = 15;
+            // 
+            // FrameName
+            // 
+            this.FrameName.HeaderText = "Name";
+            this.FrameName.Name = "FrameName";
+            this.FrameName.ReadOnly = true;
+            this.FrameName.Width = 150;
+            // 
+            // FrameType
+            // 
+            this.FrameType.HeaderText = "Type";
+            this.FrameType.Name = "FrameType";
+            this.FrameType.ReadOnly = true;
+            // 
             // TabControl
             // 
-            this.TabControl.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
+            this.TabControl.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
+            | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
             this.TabControl.Controls.Add(this.FrameTabPage);
             this.TabControl.Controls.Add(this.MemoryTabPage);
-            this.TabControl.Location = new System.Drawing.Point(660, 29);
+            this.TabControl.Location = new System.Drawing.Point(0, 0);
             this.TabControl.Name = "TabControl";
             this.TabControl.SelectedIndex = 0;
-            this.TabControl.Size = new System.Drawing.Size(348, 399);
+            this.TabControl.Size = new System.Drawing.Size(284, 399);
             this.TabControl.TabIndex = 4;
             // 
             // MenuStrip
@@ -322,7 +402,7 @@
             this.Hex,
             this.Dec,
             this.toolStripSeparator2,
-            this.MethodsMenuItem});
+            this.ClassesMenuItem});
             this.ViewMenu.Font = new System.Drawing.Font("Arial", 9F);
             this.ViewMenu.Name = "ViewMenu";
             this.ViewMenu.Size = new System.Drawing.Size(45, 20);
@@ -382,11 +462,11 @@
             this.toolStripSeparator2.Name = "toolStripSeparator2";
             this.toolStripSeparator2.Size = new System.Drawing.Size(189, 6);
             // 
-            // MethodsMenuItem
+            // ClassesMenuItem
             // 
-            this.MethodsMenuItem.Name = "MethodsMenuItem";
-            this.MethodsMenuItem.Size = new System.Drawing.Size(192, 22);
-            this.MethodsMenuItem.Text = "Methods";
+            this.ClassesMenuItem.Name = "ClassesMenuItem";
+            this.ClassesMenuItem.Size = new System.Drawing.Size(192, 22);
+            this.ClassesMenuItem.Text = "Classes";
             // 
             // Status
             // 
@@ -398,58 +478,66 @@
             this.Status.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
             this.Status.Click += new System.EventHandler(this.Status_Click);
             // 
-            // FrameAddress
+            // splitContainer1
             // 
-            this.FrameAddress.HeaderText = "Frame";
-            this.FrameAddress.Name = "FrameAddress";
-            this.FrameAddress.ReadOnly = true;
-            this.FrameAddress.Width = 50;
+            this.splitContainer1.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.splitContainer1.Location = new System.Drawing.Point(0, 24);
+            this.splitContainer1.Name = "splitContainer1";
             // 
-            // FrameValue
+            // splitContainer1.Panel1
             // 
-            this.FrameValue.HeaderText = "Value";
-            this.FrameValue.Name = "FrameValue";
-            this.FrameValue.ReadOnly = true;
-            this.FrameValue.Width = 50;
+            this.splitContainer1.Panel1.Controls.Add(this.splitContainer2);
             // 
-            // FrameName
+            // splitContainer1.Panel2
             // 
-            this.FrameName.HeaderText = "Name";
-            this.FrameName.Name = "FrameName";
-            this.FrameName.ReadOnly = true;
-            this.FrameName.Width = 200;
+            this.splitContainer1.Panel2.Controls.Add(this.TabControl);
+            this.splitContainer1.Size = new System.Drawing.Size(1008, 402);
+            this.splitContainer1.SplitterDistance = 730;
+            this.splitContainer1.TabIndex = 6;
             // 
-            // MemoryAddress
+            // splitContainer2
             // 
-            this.MemoryAddress.HeaderText = "Address";
-            this.MemoryAddress.Name = "MemoryAddress";
-            this.MemoryAddress.ReadOnly = true;
-            this.MemoryAddress.Width = 50;
+            this.splitContainer2.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.splitContainer2.Location = new System.Drawing.Point(0, 0);
+            this.splitContainer2.Name = "splitContainer2";
             // 
-            // MemoryValue
+            // splitContainer2.Panel1
             // 
-            this.MemoryValue.HeaderText = "Value";
-            this.MemoryValue.Name = "MemoryValue";
-            this.MemoryValue.ReadOnly = true;
-            this.MemoryValue.Width = 50;
+            this.splitContainer2.Panel1.Controls.Add(this.splitContainer3);
             // 
-            // MemoryName
+            // splitContainer2.Panel2
             // 
-            this.MemoryName.HeaderText = "Name";
-            this.MemoryName.Name = "MemoryName";
-            this.MemoryName.ReadOnly = true;
-            this.MemoryName.Width = 200;
+            this.splitContainer2.Panel2.Controls.Add(this.Code);
+            this.splitContainer2.Size = new System.Drawing.Size(730, 402);
+            this.splitContainer2.SplitterDistance = 243;
+            this.splitContainer2.TabIndex = 0;
+            // 
+            // splitContainer3
+            // 
+            this.splitContainer3.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.splitContainer3.Location = new System.Drawing.Point(0, 0);
+            this.splitContainer3.Name = "splitContainer3";
+            this.splitContainer3.Orientation = System.Windows.Forms.Orientation.Horizontal;
+            // 
+            // splitContainer3.Panel1
+            // 
+            this.splitContainer3.Panel1.Controls.Add(this.Registers);
+            this.splitContainer3.Panel1MinSize = 300;
+            // 
+            // splitContainer3.Panel2
+            // 
+            this.splitContainer3.Panel2.Controls.Add(this.Output);
+            this.splitContainer3.Size = new System.Drawing.Size(243, 402);
+            this.splitContainer3.SplitterDistance = 300;
+            this.splitContainer3.TabIndex = 0;
             // 
             // EmulatorForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(1008, 426);
-            this.Controls.Add(this.TabControl);
-            this.Controls.Add(this.Output);
+            this.Controls.Add(this.splitContainer1);
             this.Controls.Add(this.MenuStrip);
-            this.Controls.Add(this.Code);
-            this.Controls.Add(this.Registers);
             this.MainMenuStrip = this.MenuStrip;
             this.Name = "EmulatorForm";
             this.Text = "SBC Emulator";
@@ -463,6 +551,19 @@
             this.TabControl.ResumeLayout(false);
             this.MenuStrip.ResumeLayout(false);
             this.MenuStrip.PerformLayout();
+            this.splitContainer1.Panel1.ResumeLayout(false);
+            this.splitContainer1.Panel2.ResumeLayout(false);
+            ((System.ComponentModel.ISupportInitialize)(this.splitContainer1)).EndInit();
+            this.splitContainer1.ResumeLayout(false);
+            this.splitContainer2.Panel1.ResumeLayout(false);
+            this.splitContainer2.Panel2.ResumeLayout(false);
+            ((System.ComponentModel.ISupportInitialize)(this.splitContainer2)).EndInit();
+            this.splitContainer2.ResumeLayout(false);
+            this.splitContainer3.Panel1.ResumeLayout(false);
+            this.splitContainer3.Panel2.ResumeLayout(false);
+            this.splitContainer3.Panel2.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.splitContainer3)).EndInit();
+            this.splitContainer3.ResumeLayout(false);
             this.ResumeLayout(false);
             this.PerformLayout();
 
@@ -498,14 +599,19 @@
         private System.Windows.Forms.ToolStripMenuItem Dec;
         private System.Windows.Forms.ToolStripMenuItem Status;
         private System.Windows.Forms.ToolStripSeparator toolStripSeparator2;
-        private System.Windows.Forms.ToolStripMenuItem MethodsMenuItem;
         private System.Windows.Forms.ToolStripMenuItem RunToMenuItem;
         private System.Windows.Forms.DataGridViewTextBoxColumn MemoryAddress;
         private System.Windows.Forms.DataGridViewTextBoxColumn MemoryValue;
         private System.Windows.Forms.DataGridViewTextBoxColumn MemoryName;
+        private System.Windows.Forms.ToolStripMenuItem ClassesMenuItem;
         private System.Windows.Forms.DataGridViewTextBoxColumn FrameAddress;
         private System.Windows.Forms.DataGridViewTextBoxColumn FrameValue;
+        private System.Windows.Forms.DataGridViewTextBoxColumn FrameCat;
         private System.Windows.Forms.DataGridViewTextBoxColumn FrameName;
+        private System.Windows.Forms.DataGridViewTextBoxColumn FrameType;
+        private System.Windows.Forms.SplitContainer splitContainer1;
+        private System.Windows.Forms.SplitContainer splitContainer2;
+        private System.Windows.Forms.SplitContainer splitContainer3;
     }
 }
 

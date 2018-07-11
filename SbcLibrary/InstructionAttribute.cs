@@ -1,9 +1,9 @@
+using System;
+using System.Reflection;
+
 namespace SbcLibrary
 {
-    public class InstructionAttribute : ArgsAttribute
+    public class InstructionAttribute : Attribute
     {
-        public InstructionAttribute(params string[] regex) : base(regex)
-        {
-        }
     }
 }

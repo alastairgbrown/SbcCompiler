@@ -6,17 +6,17 @@ using System.Diagnostics;
 
 namespace SbcCore
 {
-    [ImplementClass("System.Collections.Generic.List")]
+    [ImplementClass(typeof(List<>))]
     public class System_Collections_Generic_List<T> : IEnumerable, IEnumerable<T>
     {
-        private T[] _items = new T[Global.Config.HeapGranularity - 2];
+        private T[] _items;
         private int _size;
 
         public System_Collections_Generic_List()
-        => _items = new T[Global.Config.HeapGranularity - 2];
+            => _items = new T[Global.Config.HeapGranularity - 2];
 
         public System_Collections_Generic_List(int capacity)
-        =>  _items = new T[capacity];
+            => _items = new T[capacity];
 
         private void EnsureCapacity(int min)
         {
@@ -40,16 +40,15 @@ namespace SbcCore
         public void Add(T item)
         {
             if (_size == _items.Length) EnsureCapacity(_size + 1);
+
             _items[_size++] = item;
         }
 
         public void Insert(int index, T item)
         {
             if (_size == _items.Length) EnsureCapacity(_size + 1);
-            if (index < _size)
-            {
-                Array.Copy(_items, index, _items, index + 1, _size - index);
-            }
+            if (index < _size) Array.Copy(_items, index, _items, index + 1, _size - index);
+
             _items[index] = item;
             _size++;
         }
@@ -58,9 +57,8 @@ namespace SbcCore
         {
             _size--;
             if (index < _size)
-            {
                 Array.Copy(_items, index + 1, _items, index, _size - index);
-            }
+
             _items[_size] = default(T);
         }
 
@@ -78,8 +76,8 @@ namespace SbcCore
             }
         }
 
-        public IEnumerator GetEnumerator() => new Enumerator(this);
-
+        Enumerator GetEnumerator() => new Enumerator(this);
+        IEnumerator IEnumerable.GetEnumerator() => new Enumerator(this);
         IEnumerator<T> IEnumerable<T>.GetEnumerator() => new Enumerator(this);
 
         public struct Enumerator : IEnumerator<T>, IEnumerator
@@ -101,7 +99,7 @@ namespace SbcCore
 
             public bool MoveNext()
             {
-                if (_index < _list._size)
+                if (_index < _list.Count)
                 {
                     _current = _list._items[_index];
                     _index++;
@@ -111,21 +109,14 @@ namespace SbcCore
             }
 
             public T Current => _current;
+            Object IEnumerator.Current => _current;
 
-            Object System.Collections.IEnumerator.Current
-            {
-                get
-                {
-                    Debug.Assert(_index > 0 && _index < _list._size + 1);
-                    return Current;
-                }
-            }
-
-            void System.Collections.IEnumerator.Reset()
+            void IEnumerator.Reset()
             {
                 _index = 0;
                 _current = default(T);
             }
         }
     }
+
 }

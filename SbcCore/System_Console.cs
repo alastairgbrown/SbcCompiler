@@ -1,8 +1,9 @@
 ﻿using SbcLibrary;
+using System;
 
 namespace SbcCore
 {
-    [ImplementClass("System.Console")]
+    [ImplementClass(typeof(Console))]
     public class System_Console 
     {
         public static void Write(string message)

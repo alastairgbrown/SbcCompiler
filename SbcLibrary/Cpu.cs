@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.InteropServices;
 
 namespace SbcLibrary
 {
@@ -27,19 +28,19 @@ namespace SbcLibrary
         /// Top of stack and RA register
         /// </summary>
         [Register]
-        public int RA { get; set; }
+        public RegisterValue RA { get; set; }
 
         /// <summary>
         /// Next in stack and RB register
         /// </summary>
         [Register]
-        public int RB { get; set; }
+        public RegisterValue RB { get; set; }
 
         /// <summary>
         /// Lowest stack register
         /// </summary>
         [Register]
-        public int RC { get; set; }
+        public RegisterValue RC { get; set; }
 
         /// <summary>
         /// Index X register
@@ -260,7 +261,7 @@ namespace SbcLibrary
         [Opcode(Opcode.STX)]
         public void STX()
         {
-            SetMemory(RX + RK, RA);
+            SetMemory(RX + RK, RA.Int);
             RA = RB;
             RB = RC;
             RK = PF = EF = 0;
@@ -270,7 +271,7 @@ namespace SbcLibrary
         [Opcode(Opcode.STY)]
         public void STY()
         {
-            SetMemory(RY + RK, RA);
+            SetMemory(RY + RK, RA.Int);
             RA = RB;
             RB = RC;
             RK = PF = EF = 0;
@@ -295,7 +296,7 @@ namespace SbcLibrary
         [Opcode(Opcode.LDA)]
         public void LDA()
         {
-            RA = Memory[RA + RK];
+            RA = Memory[RA.Int + RK];
             RK = PF = EF = 0;
             PC += (SLOT = (SLOT + 1) % SlotsPerMemoryUnit) == 0 ? 1 : 0;
         }
@@ -318,7 +319,7 @@ namespace SbcLibrary
         [Opcode(Opcode.STA)]
         public void STA()
         {
-            SetMemory(RA + RK, RB);
+            SetMemory(RA.Int + RK, RB.Int);
             RA = RC;
             RK = PF = EF = 0;
             PC += (SLOT = (SLOT + 1) % SlotsPerMemoryUnit) == 0 ? 1 : 0;
@@ -373,38 +374,39 @@ namespace SbcLibrary
             PC += (SLOT = (SLOT + 1) % SlotsPerMemoryUnit) == 0 ? 1 : 0;
         }
 
-
-        /// <summary>
-        /// /****************************************************************************/
-        /// SWX      0x17              Swap RA and RX
-        /// /----------------------------------------------------------------------------/
-        /// RA' = RX
-        /// RB' = unchanged
-        /// RC' = unchanged
-        /// RX' = RA
-        /// RK' = 0
-        /// PC' = $next_address
-        /// SLOT' = $next_address
-        /// pf' = 0
-        /// cf' = unchanged
-        /// ef' = 0
-        /// </summary>
-        [Opcode(Opcode.SWX)]
-        public void SWX()
+        [Opcode(Opcode.PUX)]
+        public void PUX()
         {
-            var ra = RA;
+            RC = RB;
+            RB = RA;
             RA = RX;
-            RX = ra;
             RK = PF = EF = 0;
             PC += (SLOT = (SLOT + 1) % SlotsPerMemoryUnit) == 0 ? 1 : 0;
         }
-
-        [Opcode(Opcode.SWY)]
-        public void SWY()
+        [Opcode(Opcode.POX)]
+        public void POX()
         {
-            var ra = RA;
+            RX = RA.Int;
+            RA = RB;
+            RB = RC;
+            RK = PF = EF = 0;
+            PC += (SLOT = (SLOT + 1) % SlotsPerMemoryUnit) == 0 ? 1 : 0;
+        }
+        [Opcode(Opcode.PUY)]
+        public void PUY()
+        {
+            RC = RB;
+            RB = RA;
             RA = RY;
-            RY = ra;
+            RK = PF = EF = 0;
+            PC += (SLOT = (SLOT + 1) % SlotsPerMemoryUnit) == 0 ? 1 : 0;
+        }
+        [Opcode(Opcode.POY)]
+        public void POY()
+        {
+            RY = RA.Int;
+            RA = RB;
+            RB = RC;
             RK = PF = EF = 0;
             PC += (SLOT = (SLOT + 1) % SlotsPerMemoryUnit) == 0 ? 1 : 0;
         }
@@ -451,7 +453,7 @@ namespace SbcLibrary
         [Opcode(Opcode.AKA)]
         public void AKA()
         {
-            RA += RK;
+            RA = RA.Int + RK;
             RK = PF = EF = 0;
             PC += (SLOT = (SLOT + 1) % SlotsPerMemoryUnit) == 0 ? 1 : 0;
         }
@@ -528,7 +530,7 @@ namespace SbcLibrary
         [Opcode(Opcode.JPZ)]
         public void JPZ()
         {
-            if (RA == 0)
+            if (RA.Int == 0)
             {
                 SLOT = Config.AddrSlotToSlot(RK);
                 PC = Config.AddrSlotToAddr(RK);
@@ -564,8 +566,8 @@ namespace SbcLibrary
             PC += (SLOT = (SLOT + 1) % SlotsPerMemoryUnit) == 0 ? 1 : 0;
             RA = CurrentAddrSlot;
             RK = PF = EF = 0;
-            PC = Config.AddrSlotToAddr(ra);
-            SLOT = Config.AddrSlotToSlot(ra);
+            PC = Config.AddrSlotToAddr(ra.Int);
+            SLOT = Config.AddrSlotToSlot(ra.Int);
         }
 
         /// <summary>
@@ -612,7 +614,7 @@ namespace SbcLibrary
         [Opcode(Opcode.ADD)]
         public void ADD()
         {
-            RA += RB;
+            RA = RA.Int + RB.Int;
             RK = PF = EF = 0;
             PC += (SLOT = (SLOT + 1) % SlotsPerMemoryUnit) == 0 ? 1 : 0;
         }
@@ -636,7 +638,7 @@ namespace SbcLibrary
         [Opcode(Opcode.SUB)]
         public void SUB()
         {
-            RA = RB - RA;
+            RA = RB.Int - RA.Int;
             RK = PF = EF = 0;
             PC += (SLOT = (SLOT + 1) % SlotsPerMemoryUnit) == 0 ? 1 : 0;
         }
@@ -660,7 +662,7 @@ namespace SbcLibrary
         [Opcode(Opcode.AND)]
         public void AND()
         {
-            RA = RB & RA;
+            RA = RB.Int & RA.Int;
             RK = PF = EF = 0;
             PC += (SLOT = (SLOT + 1) % SlotsPerMemoryUnit) == 0 ? 1 : 0;
         }
@@ -684,7 +686,7 @@ namespace SbcLibrary
         [Opcode(Opcode.IOR)]
         public void IOR()
         {
-            RA = RB | RA;
+            RA = RB.Int | RA.Int;
             RK = PF = EF = 0;
             PC += (SLOT = (SLOT + 1) % SlotsPerMemoryUnit) == 0 ? 1 : 0;
         }
@@ -708,7 +710,7 @@ namespace SbcLibrary
         [Opcode(Opcode.XOR)]
         public void XOR()
         {
-            RA = RB ^ RA;
+            RA = RB.Int ^ RA.Int;
             RK = PF = EF = 0;
             PC += (SLOT = (SLOT + 1) % SlotsPerMemoryUnit) == 0 ? 1 : 0;
         }
@@ -732,7 +734,7 @@ namespace SbcLibrary
         [Opcode(Opcode.MLT)]
         public void MLT()
         {
-            var product = (long)RA * RB;
+            var product = (long)RA.Int * RB.Int;
             RA = (int)(product >> BitsPerMemoryUnit);
             RB = (int)(product & ((1L << BitsPerMemoryUnit) - 1));
             RK = PF = EF = 0;
@@ -759,7 +761,7 @@ namespace SbcLibrary
         [Opcode(Opcode.SHR)]
         public void SHR()
         {
-            RA = RA >> RB;
+            RA = RA.Int >> RB.Int;
             RB = RC;
             RK = PF = EF = 0;
             PC += (SLOT = (SLOT + 1) % SlotsPerMemoryUnit) == 0 ? 1 : 0;
@@ -785,7 +787,7 @@ namespace SbcLibrary
         [Opcode(Opcode.SHL)]
         public void SHL()
         {
-            RA = RA << RB;
+            RA = RA.Int << RB.Int;
             RB = RC;
             RK = PF = EF = 0;
             PC += (SLOT = (SLOT + 1) % SlotsPerMemoryUnit) == 0 ? 1 : 0;
@@ -810,7 +812,7 @@ namespace SbcLibrary
         [Opcode(Opcode.ZEQ)]
         public void ZEQ()
         {
-            RA = RA == 0 ? 1 : 0;
+            RA = RA.Int == 0 ? 1 : 0;
             RK = PF = EF = 0;
             PC += (SLOT = (SLOT + 1) % SlotsPerMemoryUnit) == 0 ? 1 : 0;
         }
@@ -834,7 +836,7 @@ namespace SbcLibrary
         [Opcode(Opcode.AGB)]
         public void AGB()
         {
-            RA = RA > RB ? 1 : 0;
+            RA = RA.Int > RB.Int ? 1 : 0;
             RK = PF = EF = 0;
             PC += (SLOT = (SLOT + 1) % SlotsPerMemoryUnit) == 0 ? 1 : 0;
         }
@@ -859,10 +861,18 @@ namespace SbcLibrary
         [Opcode(Opcode.MFD)]
         public void MFD()
         {
-            Memory[RC++] = Memory[RB++];
-            RA--;
+            if (RA.Int > 0)
+            {
+                Memory[RC.Int] = Memory[RB.Int];
+                RB = RB.Int + 1;
+                RC = RC.Int + 1;
+                RA = RA.Int - 1;
+            }
+            else
+            {
+                PC += (SLOT = (SLOT + 1) % SlotsPerMemoryUnit) == 0 ? 1 : 0;
+            }
             RK = PF = EF = 0;
-            PC += (SLOT = (SLOT + 1) % SlotsPerMemoryUnit) == 0 ? 1 : 0;
         }
 
         /// <summary>
@@ -885,10 +895,18 @@ namespace SbcLibrary
         [Opcode(Opcode.MBD)]
         public void MBD()
         {
-            Memory[RC--] = Memory[RB--];
-            RA--;
+            if (RA.Int > 0)
+            {
+                Memory[RC.Int] = Memory[RB.Int];
+                RB = RB.Int - 1;
+                RC = RC.Int - 1;
+                RA = RA.Int - 1;
+            }
+            else
+            {
+                PC += (SLOT = (SLOT + 1) % SlotsPerMemoryUnit) == 0 ? 1 : 0;
+            }
             RK = PF = EF = 0;
-            PC += (SLOT = (SLOT + 1) % SlotsPerMemoryUnit) == 0 ? 1 : 0;
         }
 
         /// <summary>
@@ -914,6 +932,125 @@ namespace SbcLibrary
             PC += (SLOT = (SLOT + 1) % SlotsPerMemoryUnit) == 0 ? 1 : 0;
         }
 
+        /// <summary>
+        /// FPA 0x3B Float Add
+        /// RA' = $float(RA + RB)
+        /// RB' = RC
+        /// RC' = unchanged
+        /// RX' = unchanged
+        /// RY' = unchanged
+        /// RK' = 0
+        /// RI' = unchanged
+        /// PC' = $next_address
+        /// SLOT' = $next_address
+        /// pf' = 0
+        /// cf' = unchanged
+        /// ef' = 0
+        /// irqf' = unchanged
+        /// </summary>
+        [Opcode(Opcode.FPA)]
+        public void FPA()
+        {
+            RA = RA.Float + RB.Float;
+            RB = RC;
+            PC += (SLOT = (SLOT + 1) % SlotsPerMemoryUnit) == 0 ? 1 : 0;
+        }
+
+        /// <summary>
+        /// FPM 0x3C Float Multiply
+        /// RA' = $float(RA * RB)
+        /// RB' = RC
+        /// RC' = unchanged
+        /// RX' = unchanged
+        /// RY' = unchanged
+        /// RK' = 0
+        /// RI' = unchanged
+        /// PC' = $next_address
+        /// SLOT' = $next_address
+        /// pf' = 0
+        /// cf' = unchanged
+        /// ef' = 0
+        /// irqf' = unchanged
+        /// </summary>
+        [Opcode(Opcode.FPM)]
+        public void FPM()
+        {
+            RA = RA.Float * RB.Float;
+            RB = RC;
+            PC += (SLOT = (SLOT + 1) % SlotsPerMemoryUnit) == 0 ? 1 : 0;
+        }
+
+        /// <summary>
+        /// FPD 0x3D Float Divide
+        /// RA' = $float(RA / RB)
+        /// RB' = RC
+        /// RC' = unchanged
+        /// RX' = unchanged
+        /// RY' = unchanged
+        /// RK' = 0
+        /// RI' = unchanged
+        /// PC' = $next_address
+        /// SLOT' = $next_address
+        /// pf' = 0
+        /// cf' = unchanged
+        /// ef' = 0
+        /// irqf' = unchanged
+        /// </summary>
+        [Opcode(Opcode.FPD)]
+        public void FPD()
+        {
+            RA = RA.Float / RB.Float;
+            RB = RC;
+            PC += (SLOT = (SLOT + 1) % SlotsPerMemoryUnit) == 0 ? 1 : 0;
+        }
+
+        /// <summary>
+        /// I2F 0x3E Integer To Float
+        /// RA' = $float(RA)
+        /// RB' = unchanged
+        /// RC' = unchanged
+        /// RX' = unchanged
+        /// RY' = unchanged
+        /// RK' = 0
+        /// RI' = unchanged
+        /// PC' = $next_address
+        /// SLOT' = $next_address
+        /// pf' = 0
+        /// cf' = unchanged
+        /// ef' = 0
+        /// irqf' = unchanged
+        /// </summary>
+        [Opcode(Opcode.I2F)]
+        public void I2F()
+        {
+            RA = (float)RA.Int;
+            PC += (SLOT = (SLOT + 1) % SlotsPerMemoryUnit) == 0 ? 1 : 0;
+        }
+
+        /// <summary>
+        /// F2I 0x3F Float To Integer
+        /// RA' = $integer(RA)
+        /// RB' = unchanged
+        /// RC' = unchanged
+        /// RX' = unchanged
+        /// RY' = unchanged
+        /// RK' = 0
+        /// RI' = unchanged
+        /// PC' = $next_address
+        /// SLOT' = $next_address
+        /// pf' = 0
+        /// cf' = unchanged
+        /// ef' = 0
+        /// irqf' = unchanged
+        /// </summary>
+        [Opcode(Opcode.F2I)]
+        public void F2I()
+        {
+            RA = (int)RA.Float;
+            PC += (SLOT = (SLOT + 1) % SlotsPerMemoryUnit) == 0 ? 1 : 0;
+        }
+
+
         [AttributeUsage(AttributeTargets.All, AllowMultiple = true)]
         private class OpcodeAttribute : Attribute
         {
@@ -927,6 +1064,36 @@ namespace SbcLibrary
 
         private class RegisterAttribute : Attribute
         {
+        }
+
+        [StructLayout(LayoutKind.Explicit)]
+        public struct RegisterValue
+        {
+            [FieldOffset(0)] bool _isFloat;
+            [FieldOffset(4)] int _int;
+            [FieldOffset(4)] float _float;
+
+            public RegisterValue(int value)
+            {
+                _isFloat = false;
+                _float = 0;
+                _int = value;
+            }
+
+            public RegisterValue(float value)
+            {
+                _isFloat = true;
+                _int = 0;
+                _float = value;
+            }
+
+            public bool IsFloat => _isFloat;
+            public int Int => _int;
+            public float Float => _float;
+            public object Value => _isFloat ? (object)_float : (object)_int;
+
+            public static implicit operator RegisterValue(int value) => new RegisterValue(value);
+            public static implicit operator RegisterValue(float value) => new RegisterValue(value);
         }
     }
 }

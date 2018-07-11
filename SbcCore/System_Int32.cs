@@ -1,18 +1,18 @@
 ﻿using SbcLibrary;
+using System;
 
 namespace SbcCore
 {
-    [ImplementClass("System.Int32")]
-    struct System_Int32 
+    [ImplementClass(typeof(Int32))]
+    struct System_Int32
     {
         internal int m_value;
 
+        [Vars("tens", "count", "value", "digit", "str")]
         public override string ToString()
         {
-            var tens = 10;
-            var count = 1;
-            var negative = m_value < 0;
-            var value = negative ? -m_value : m_value;
+            int tens = 10, count = 1, value = Math.Abs(m_value), digit;
+            char[] str;
 
             while (tens <= value)
             {
@@ -20,8 +20,7 @@ namespace SbcCore
                 count++;
             }
 
-            var str = new char[(negative ? 1 : 0) + count];
-
+            str = new char[(m_value < 0 ? 1 : 0) + count];
             str[0] = '-';
 
             for (count--; count >= 0; count--)
@@ -32,7 +31,7 @@ namespace SbcCore
                     tens *= 10;
                 }
 
-                var digit = (int)'0';
+                digit = (int)'0';
                 while (value >= tens)
                 {
                     value -= tens;
@@ -42,7 +41,10 @@ namespace SbcCore
                 str[str.Length - 1 - count] = (char)digit;
             }
 
-            return new string(str, 0, str.Length);
+            return str.ConvertToString(str.Length);
         }
+
+        public override int GetHashCode() => m_value;
+        public override bool Equals(Object obj) => obj is System_Int32 value && m_value == value.m_value;
     }
 }

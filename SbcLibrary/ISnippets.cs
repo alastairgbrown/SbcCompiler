@@ -8,8 +8,6 @@ namespace SbcLibrary
 {
     public interface ISnippets
     {
-        Action GetRX { get; }
-        Action GetRY { get; }
         Action Ldlen { get; }
         Action StackPush { get; }
         Action StackPop { get; }
@@ -21,11 +19,11 @@ namespace SbcLibrary
         Action StackSet { get; }
         Action MethodPreamble { get; }
         Action MethodReturn { get; }
-        Action MFD { get; }
-        Action MBD { get; }
         Action CopyFromFrameToStack(ArgData arg);
         Action CopyFromStackToFrame(ArgData arg);
-        Action CopyFromMemoryToStack(TypeData type);
-        Action CopyFromStackToMemory(TypeData type);
+        Action CopyFromMemoryToStack(Type type);
+        Action CopyFromStackToMemory(Type type);
+        Action InsertStack(int index, int count);
+        Action Compare(string comp);
     }
 }

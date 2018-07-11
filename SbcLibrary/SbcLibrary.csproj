@@ -40,26 +40,28 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="ArgsAttribute.cs" />
+    <Compile Include="Class.cs" />
     <Compile Include="Compilation.cs" />
     <Compile Include="Compiler.cs" />
     <Compile Include="CompilerBase.cs" />
     <Compile Include="Config.cs" />
     <Compile Include="ConfigAttribute.cs" />
     <Compile Include="Cpu.cs" />
-    <Compile Include="DirectiveAttribute.cs" />
     <Compile Include="EmitArg.cs" />
+    <Compile Include="Extensions.cs" />
     <Compile Include="Global.cs" />
+    <Compile Include="ILInstruction.cs" />
     <Compile Include="ImplementAttribute.cs" />
     <Compile Include="InstructionAttribute.cs" />
     <Compile Include="ISnippets.cs" />
     <Compile Include="Label.cs" />
+    <Compile Include="Instruction.cs" />
+    <Compile Include="Memory.cs" />
+    <Compile Include="Method.cs" />
     <Compile Include="Node.cs" />
     <Compile Include="Opcode.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="SignatureParser.cs" />
     <Compile Include="InlineAttribute.cs" />
-    <Compile Include="TypeData.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>

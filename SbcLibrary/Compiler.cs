@@ -2,303 +2,124 @@ using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Diagnostics;
-using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Reflection;
-using System.Text;
-using System.Text.RegularExpressions;
 
 namespace SbcLibrary
 {
     public class Compiler
     {
-        public Pass Pass { get; set; } = Pass.Parse;
-
         public Compilation Compilation { get; } = new Compilation();
         public Config Config => Compilation.Config;
-        public SortedDictionary<string, Node> Methods { get; } = new SortedDictionary<string, Node>();
-        public SortedDictionary<string, Node> Classes { get; } = new SortedDictionary<string, Node>();
-        public SortedDictionary<string, Node> TemplateClasses { get; } = new SortedDictionary<string, Node>();
-        public SortedDictionary<string, Node> StaticFields { get; } = new SortedDictionary<string, Node>();
-        public SortedDictionary<string, Label> LabelDefs { get; } = new SortedDictionary<string, Label>();
+        public IDictionary<string, Label> LabelDefs { get; } = new SortedDictionary<string, Label>();
         public List<Label> LabelRefs { get; set; } = new List<Label>();
         public List<Node> IncludedNodes { get; } = new List<Node>();
-        public List<Node> IncludedInterfaces { get; } = new List<Node>();
-        public int CurrentLabelAddress { get; set; }
+        public List<Class> IncludedInterfaces { get; } = new List<Class>();
+        public int CurrentLabelAddress { get; set; } = -1;
         public ArgData[] CurrentArgs { get; set; }
         public ArgData[] CurrentLocals { get; set; }
         public int CurrentFrameSize { get; set; }
-        public Stack<TypeData> CurrentTypes { get; } = new Stack<TypeData>();
+        public Stack<Type> CurrentTypes { get; } = new Stack<Type>();
         public List<string> CurrentTypesDebug { get; } = new List<string>();
-        public Node EntryPoint { get; set; }
+        public List<Assembly> Assemblies { get; } = new List<Assembly>();
+        public IDictionary<string, Class> Types { get; } = new SortedDictionary<string, Class>();
+        public List<Class> Classes { get; } = new List<Class>();
         public string MifFileName { get; private set; }
-        public int LabelIndex { get; set; }
-        public Stack<Node> FinallyBlocks { get; } = new Stack<Node>();
-
         public ISnippets Snippets { get; private set; }
-        public Dictionary<string, Action> Inlines { get; } = new Dictionary<string, Action>();
+        public Stack<int> FinallyAddresses { get; } = new Stack<int>();
 
-        private static readonly Dictionary<string, ArgsAttribute> Directives = typeof(Node).GetMethods()
-            .Select(m => m.GetCustomAttributes(false).OfType<DirectiveAttribute>().FirstOrDefault()?.SetMethod(m))
-            .Where(m => m != null)
-            .ToDictionary(m => m.Method.Name, m => m, StringComparer.OrdinalIgnoreCase);
-
-        private static readonly Dictionary<string, ArgsAttribute> Instructions = typeof(Node).GetMethods()
-            .Select(m => m.GetCustomAttributes(false).OfType<InstructionAttribute>().FirstOrDefault()?.SetMethod(m))
-            .Where(m => m != null)
-            .ToDictionary(m => m.Method.Name, m => m, StringComparer.OrdinalIgnoreCase);
-
-        private static readonly Regex DirectiveRegex =
-            new Regex(
-                $@"^\.({string.Join("|", Directives.Keys.Select(k => $@"(?<Keyword>{k})\b\s?"))})|^[{{}}]$", RegexOptions.IgnoreCase);
-
-        private static readonly Regex InstructionRegex =
-            new Regex(
-                $@"^((?<Label>\w+):\s)?({string.Join("|", Instructions.Keys.Select(k => $@"(?<Keyword>{k})\b"))})|^[{{}}]$", RegexOptions.IgnoreCase);
-
-        public const string HeapInitialise = "void System.GC::HeapInitialise()";
-        public const string New = "int32 System.GC::New(int32)";
-        public const string Newarr = "int32 System.GC::Newarr(int32,int32,int32)";
-        public const string Newobj = "int32 System.GC::Newobj(int32,int32)";
-        public const string StringCtor = "void System.String::.ctor(char[],int32,int32)";
-        public const string StringCtorMethod = "char[] System.String::ctor(char[],int32,int32)";
-        public const string Break = "void System.Diagnostics.Debugger::Break()";
-        public const string CallCctors = "CallCctors";
-        public const string ClassKeywords =
-            @"abstract|ansi|auto|autochar|beforefieldinit|explicit|interface|nested \w+|" +
-            @"private|public|rtspecialname|sealed|sequential|serializable|specialname|unicode";
-
-        private static readonly Regex StripComment = new Regex(@"(?<Keep>""(?:\\.|.)*?"")|(?<Keep>\s)\s+|//.*$", RegexOptions.Multiline);
-        private static readonly Regex Custom =
-            new Regex(@"\.class ((" + ClassKeywords + @")\s)+(?<Class>[\w+.]+)|" +
-                      @"\.custom instance void (\[\w+\])(?<Name>[\w\.]+)::.ctor\(.*?\) = \(\s+(?<Byte>[A-Fa-f0-9]{2}\s+)+\)",
-                    RegexOptions.Singleline);
-
+        public Method Main => Classes.Single(c => c.Type.Name == "Program").GetMethod(typeof(void), "Main");
+        public Method StringCtor => GetClass(typeof(string)).GetMethod(typeof(void), ".Ctor", typeof(char[]), typeof(int), typeof(int));
+        public Method StringCtorMethod => GetClass(typeof(string)).GetMethod(typeof(string), "InternalCtor", typeof(char[]), typeof(int), typeof(int));
+        public Method IsInst => GetClass(typeof(Type)).GetMethod(typeof(object), "IsInst", typeof(object));
+        public Method Break => GetClass(typeof(Debugger)).GetMethod(typeof(void), nameof(Debugger.Break));
+        public Method HeapInitialise => GetClass(typeof(Memory)).GetMethod(typeof(void), nameof(Memory.HeapInitialise));
+        public Method Newarr => GetClass(typeof(Memory)).GetMethod(typeof(int), nameof(Memory.Newarr), typeof(int), typeof(int), typeof(int));
+        public Method Newobj => GetClass(typeof(Memory)).GetMethod(typeof(int), nameof(Memory.Newobj), typeof(int), typeof(int));
+        public Method CallCctors => GetClass(typeof(Memory)).GetMethod(typeof(void), nameof(Memory.CallCCtors));
 
         public int CurrentAddrIdx => Config.ExecutableStart + Compilation.Opcodes.Count;
         public int CurrentConstAddr => Config.ConstStart + Compilation.ConstData.Count;
-
-        public string GetNewLabel() => $"Label{LabelIndex++}";
-
         public int CurrentStaticAddr => Config.StaticStart + Compilation.StaticDataCount;
 
-
-        public int SizeOfClass(string className) => Classes["System.Type"].ClassMethodSlots.Count;
+        public Type Correct(Type type)
+            => type != null && Types.TryGetValue(type.Id(), out var c) ? c.Implements : type;
 
         public void ProcessFile(string fileName)
         {
-            if (string.Compare(Path.GetExtension(fileName), ".dll") == 0)
-                ProcessAssembly(fileName);
-            else if (string.Compare(Path.GetExtension(fileName), ".mif") == 0)
-                ProcessMifFile(fileName);
-            else
-                ProcessAsmFile(fileName);
+            if (string.Compare(Path.GetExtension(fileName), ".dll", true) == 0 ||
+                string.Compare(Path.GetExtension(fileName), ".exe", true) == 0)
+                Assemblies.Add(Assembly.LoadFile(fileName));
+            else if (string.Compare(Path.GetExtension(fileName), ".mif", true) == 0)
+                MifFileName = fileName;
         }
 
-        private void ProcessMifFile(string fileName)
+        public void ProcessAssemblies()
         {
-            MifFileName = fileName;
-        }
+            var types = Assemblies.SelectMany(a => a.DefinedTypes).ToList();
 
-        public void ProcessAssembly(string fileName)
-        {
-            var assembly = Assembly.LoadFile(fileName);
-            var flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static;
-            var typeSubst = new HashSet<Type> { typeof(int), typeof(object[]), typeof(void), typeof(char), typeof(string), typeof(object) };
-            string Correct(Type type) => typeSubst.Contains(type) ? type.Name.ToLower() : type.FullName;
-            object Instance(Type type) => type.IsValueType ? Activator.CreateInstance(type) : null;
+            Snippets = (ISnippets)types.FirstOrDefault(
+                        t => t.ImplementedInterfaces.Contains(typeof(ISnippets)))?.GetConstructors().Single().Invoke(new object[0]);
+            foreach (var type in types)
+                new Class(this, type);
 
-            foreach (var type in assembly.DefinedTypes)
-            {
-                var typeName = type.GetCustomAttribute<ImplementClassAttribute>()?.Name ?? type.FullName;
+            Classes.ForEach(c => c.LoadMethods());
 
-                foreach (var inline in type.GetMethods(flags)
-                                           .Select(m => new { Attr = m.GetCustomAttribute<InlineAttribute>(), Prop = m })
-                                           .Where(m => m.Attr != null))
-                {
-                    var signature = inline.Attr.Signature ??
-                                    $"{Correct(inline.Prop.ReturnType)} {typeName}::{inline.Prop.Name}" +
-                                    $"({string.Join(",", inline.Prop.GetParameters().Select(p => Correct(p.ParameterType)))})";
-                    var obj = inline.Prop.IsStatic ? null : inline.Prop.DeclaringType.GetConstructors().First().Invoke(new object[0]);
-                    var args = inline.Prop.GetParameters().Select(p => p.ParameterType).Select(Instance).ToArray();
-
-                    Inlines[signature] = () => inline.Prop.Invoke(obj, args);
-                }
-            }
-
-            Snippets = (ISnippets)assembly.DefinedTypes.FirstOrDefault(t => t.ImplementedInterfaces.Contains(typeof(ISnippets)))
-                                          ?.GetConstructors().Single().Invoke(new object[0]) ?? Snippets;
-        }
-
-        public void ProcessAsmFile(string fileName)
-        {
-            var content = File.ReadAllText(fileName);
-            var className = (string)null;
-            var substitutions = new Dictionary<string, string> { { $"{Guid.NewGuid()}", "" } };
-
-            string Replace(Match match)
-            {
-                if (match.Groups["Class"].Success)
-                {
-                    className = match.Groups["Class"].Value;
-                    return match.Value;
-                }
-
-                var name = match.Groups["Name"].Value;
-                var bytes = match.Groups["Byte"].Captures.OfType<Capture>()
-                                  .Select(b => byte.Parse(b.Value, NumberStyles.HexNumber)).Skip(2).ToArray();
-
-                using (var stream = new MemoryStream(bytes))
-                using (var reader = new BinaryReader(stream))
-                {
-                    if (name == $"{nameof(SbcLibrary)}.{nameof(ConfigAttribute)}")
-                    {
-                        var prop = Config.GetType().GetProperty(Encoding.ASCII.GetString(reader.ReadBytes(reader.ReadByte())));
-
-                        if (prop?.CanWrite == true)
-                            prop.SetValue(Config, reader.ReadInt32());
-                    }
-
-                    if (name == $"{nameof(SbcLibrary)}.{nameof(ImplementClassAttribute)}")
-                    {
-                        substitutions[className] = Encoding.ASCII.GetString(reader.ReadBytes(reader.ReadByte()));
-                        className = null;
-                    }
-
-                    return "\n";
-                }
-            }
-
-            Regex SubstitutionsRegex() =>
-                new Regex($@"\b({string.Join("|", substitutions.Keys.Select(v => v.Replace(".", @"\.")))})\b",
-                            RegexOptions.Compiled);
-
-            content = StripComment.Replace(content, "${Keep}");
-            content = Custom.Replace(content, Replace);
-            content = SubstitutionsRegex().Replace(content, m => substitutions[m.Value]);
-
-            ProcessAsmContent(content);
-        }
-
-        public void ProcessAsmContent(string content)
-        {
-            Pass = Pass.Parse;
-
-            var stack = new Stack<Node>(new[] { new Node(this) });
-            var lines = content.Split(new[] { "\r\n", "\n", "\r" }, 0).Select(l => l.Trim()).Where(l => l != "").ToArray();
-
-            for (int i = 0; i < lines.Length; i++)
-            {
-                if (lines[i] == "{")
-                {
-                    stack.Push(stack.Peek().Children.Last());
-                    continue;
-                }
-
-                if (lines[i] == "}")
-                {
-                    stack.Pop();
-                    continue;
-                }
-
-                var line = new StringBuilder(lines[i]);
-                var directive = DirectiveRegex.Match(lines[i]);
-                var instruction = InstructionRegex.Match(lines[i]);
-
-                if (!directive.Success && !instruction.Success)
-                {
-                    throw new Exception($"Can't parse {line}");
-                }
-
-                var match = directive.Success ? directive : instruction;
-                var attribute = (directive.Success ? Directives : Instructions)[match.Groups["Keyword"].Value];
-
-                while (i + 1 < lines.Length &&
-                        (attribute.HasChildren
-                            ? lines[i + 1] != "{"
-                            : !InstructionRegex.IsMatch(lines[i + 1]) && !DirectiveRegex.IsMatch(lines[i + 1])))
-                {
-                    line.Append($" {lines[++i]}");
-                }
-
-                var detail = attribute.Regex.Match($"{line}".Substring(match.Index + match.Length));
-
-                if (!detail.Success)
-                {
-                    throw new Exception($"Can't parse {line}");
-                }
-
-                var node = new Node(this, stack.Peek(), $"{line}", attribute, match, detail);
-                stack.Peek().Children.Add(node);
-
-                if (attribute.ExecuteOnParse)
-                {
-                    node.Action();
-                }
-            }
-
-            Pass = Pass.CompileExecutable;
+            //var dss = new Dictionary<string, string>();
+            //var dsst = typeof(Dictionary<string, string>);
+            //var method = dsst.GetTypeInfo().DeclaredMethods.Single(m => m.Name == "Insert");
+            //var ilReader = new ILReader(method.GetMethodBody(), method.Module, dsst.GenericTypeArguments, null);
+            //var instructions = ilReader.Instructions.ToArray();
         }
 
         public void Compile()
         {
-            foreach (var method in Methods.Values.ToArray())
-            {
-                Methods[method.Signature] = method;
-            }
+            ProcessAssemblies();
 
             Global.Compiler = this;
             Global.Config = Config;
-            EmitSource("Startup", "Startup");
-            EmitSource("Initialising stack and frame");
-            Emit(Config.StackStart, Opcode.PSH, Opcode.SWX);
-            Emit(Config.StackStart + Config.StackSize - 1, Opcode.PSH, Opcode.SWY);
+
+            Include(GetClass(typeof(string)));
+            Include(GetClass(typeof(int)));
+            Include(Main);
+
+            EmitSource("Initialising stack and frame", "Startup");
+            Emit(Config.StackStart, Opcode.PSH, Opcode.POX);
+            Emit(Config.StackStart + Config.StackSize - 1, Opcode.PSH, Opcode.POY);
             EmitSource("Initialising heap");
-            Emit(new Label(HeapInitialise), Opcode.PSH, Opcode.JSR);
+            Emit(new Label(HeapInitialise, this), Opcode.PSH, Opcode.JSR);
             EmitSource("Calling static constructors");
-            Emit(new Label(CallCctors), Opcode.PSH, Opcode.JSR);
+            Emit(new Label(CallCctors, this), Opcode.PSH, Opcode.JSR);
             EmitSource("Calling main");
-            Emit(new Label(IncludedNodes.First().Signature), Opcode.PSH, Opcode.JSR);
+            Emit(new Label(Main, this), Opcode.PSH, Opcode.JSR);
             EmitSource("Break");
-            Emit(Inlines[Break]);
-            EmitMethodData("Startup", "Startup", new ArgData[0], new ArgData[0]);
+            Emit(Break.Action);
+            EmitMethodData("Startup", "Startup.Startup", "Startup", null, new ArgData[0], new ArgData[0]);
 
-            Include(Classes["string"] = Classes["System.String"]);
-            Include(Classes["int32"] = Classes["System.Int32"]);
-
-            Pass = Pass.CompileExecutable;
             for (var i = 0; i < IncludedNodes.Count; i++)
-            {
-                IncludedNodes[i].Action();
-            }
+                IncludedNodes[i].GenerateExecutable();
 
-            if (IncludedNodes.Any(n => n.Keyword == nameof(Node.Method) && n.Signature == New))
-            {
-                Methods[HeapInitialise].Action();
-            }
+            if (IncludedNodes.Contains(Newobj))
+                HeapInitialise.GenerateExecutable();
             else
-            {
-                LabelRefs.Single(lr => lr.Name == HeapInitialise).RemoveCall = true;
-            }
+                LabelRefs.Single(lr => lr.Name == HeapInitialise.Id).RemoveCall = true;
 
-            if (!EmitCallCctors())
-            {
-                LabelRefs.Single(lr => lr.Name == CallCctors).RemoveCall = true;
-            }
+            if (IncludedNodes.OfType<Method>().Any(m => m.Name == ".cctor"))
+                CallCctors.GenerateExecutable();
+            else
+                LabelRefs.Single(lr => lr.Name == CallCctors.Id).RemoveCall = true;
 
             Config.ExecutableSize = (Compilation.Opcodes.Count + Config.SlotsPerMemoryUnit - 1) / Config.SlotsPerMemoryUnit;
-            Config.StaticSize = Compilation.StaticDataCount;
-            LabelDefs["Config.StaticSize"] = new Label("Config.StaticSize", Config.StaticSize);
             Config.ConstStart = Config.ExecutableStart + Config.ExecutableSize;
-            Pass = Pass.CompileConst;
-            foreach (var node in IncludedNodes.Where(n => n.Attribute.ExecuteOnCompileConst))
-            {
-                node.Action();
-            }
-            Config.ConstSize = Compilation.ConstData.Count;
+             
+            foreach (var node in IncludedNodes)
+                node.GenerateConstData();
 
-            Pass = Pass.PatchLabels;
+            Config.ConstSize = Compilation.ConstData.Count;
+            Config.StaticSize = Compilation.StaticDataCount;
+            LabelDefs.Add(new Label("Config.StaticSize", Config.StaticSize));
+
             PatchLabels();
             Compilation.SetAddressInfo();
 
@@ -306,9 +127,21 @@ namespace SbcLibrary
                 Compilation.WriteMif(MifFileName);
         }
 
+        public Compiler Label(string addressLabel)
+            => this.With(c => Compilation.AddressLabels[CurrentConstAddr] = addressLabel);
+
+        public Compiler ConstDef(string name)
+            => this.Assert(CurrentConstAddr > 0).With(c => LabelDefs.Add(new Label(name, null, CurrentConstAddr)));
+
+        public int ConstRef(string name, object owner, int offset = 0)
+        {
+            Debug.Assert(CurrentConstAddr > 0);
+            LabelRefs.Add(new Label(name, owner, CurrentConstAddr + offset));
+            return 0;
+        }
+
         public void PatchLabels()
         {
-            Pass = Pass.PatchLabels;
             foreach (var labelRef in LabelRefs)
             {
                 if (labelRef.RemoveCall)
@@ -335,71 +168,76 @@ namespace SbcLibrary
                     CurrentLabelAddress = labelRef.Value;
                     EmitValue(labelValue, Config.BitsPerMemoryUnit);
                 }
-                else if (labelRef.Value >= Config.ConstStart && labelRef.Value < Config.ConstStart + Config.ConstSize)
-                {
-                    Compilation.ConstData[labelRef.Value - Config.ConstStart] = labelValue;
-                }
                 else
                 {
-                    Debug.Assert(false);
+                    Debug.Assert(labelRef.Value >= Config.ConstStart && labelRef.Value < Config.ConstStart + Config.ConstSize);
+                    Compilation.ConstData[labelRef.Value - Config.ConstStart] = labelValue;
                 }
             }
         }
 
-        public bool EmitCallCctors()
+        public void EmitCallCctors()
         {
-            var cctors = IncludedNodes.Where(n => n.Keyword == nameof(Node.Method) && n.Name == ".cctor").ToArray();
-
-            if (!cctors.Any())
-                return false;
-
-            CurrentArgs = CurrentLocals = new ArgData[0];
-
-            EmitSource(CallCctors, CallCctors);
-            Emit(Snippets.MethodPreamble);
-
-            foreach (var method in cctors)
+            foreach (var method in IncludedNodes.OfType<Method>().Where(m => m.Name == ".cctor"))
             {
                 EmitSource($"call {method.Signature}");
-                Emit(new Label(method.Signature), Opcode.PSH, Opcode.JSR);
+                Emit(new Label(method, this), Opcode.PSH, Opcode.JSR);
             }
-
-            EmitSource("ret");
-            Emit(Snippets.MethodReturn);
-            EmitMethodData("Startup", CallCctors, new ArgData[0], new ArgData[0]);
-
-            return true;
         }
 
-        public void EmitMethodData(string className, string signature, ArgData[] args, ArgData[] locals)
+        public void EmitClassData(string nameSpace, string className, int address, ArgData[] fields)
         {
-            Compilation.MethodData.Add(new MethodData
+            Compilation.ClassData.Add(new ClassData
             {
+                NameSpace = nameSpace,
                 ClassName = className,
-                Signature = signature,
-                AddrIdx = LabelDefs[signature].Value,
-                Range = CurrentAddrIdx - LabelDefs[signature].Value,
-                FrameItems = new[] { "M:" + signature }
-                                .Concat(args.SelectMany(x => Enumerable.Range(0,x.ElementSize).Select(i => "A:" + x.Name)))
-                                .Concat(locals.SelectMany(x => Enumerable.Range(0, x.ElementSize).Select(i => "L:" + x.Name))).ToArray()
+                Address = address,
+                Fields = fields
             });
         }
 
-        public void EmitSource(string source, string label = null)
+        public void EmitMethodData(string nameSpace, string className, string signature, string id, ArgData[] args, ArgData[] locals)
         {
-            Compilation.ExecutableLines[CurrentAddrIdx] = source;
+            Compilation.MethodData.Add(new MethodData
+            {
+                NameSpace = nameSpace,
+                ClassName = className,
+                Signature = signature,
+                AddrIdx = LabelDefs[id ?? signature].Value,
+                Range = CurrentAddrIdx - LabelDefs[id ?? signature].Value,
+                FrameItems = new[] { new FrameItem { Name = signature, Type = "Object", Cat = "M" } }
+                    .Concat(args.SelectMany(x => x.Elements.Cat("A")))
+                    .Concat(locals.SelectMany(x => x.Elements.Cat("V"))).ToArray()
+            });
+        }
+
+        public Compiler EmitLabelDef(string label, Node owner = null, bool isMethod = false)
+        {
+            LabelDefs.Add(new Label(label, owner, CurrentAddrIdx, true));
+            return this;
+        }
+
+        public Compiler EmitSource(string source, string label = null, bool isMethod = false, Node owner = null)
+        {
+            Compilation.ExecutableLines[CurrentAddrIdx] = new SourceData
+            {
+                Source = source,
+                Stack = CurrentTypes.Any() ? CurrentTypes.Select(t => t.FullName).ToArray() : null,
+                IsMethod = isMethod
+            };
 
             if (!string.IsNullOrEmpty(label))
             {
-                LabelDefs[label] = new Label(label, CurrentAddrIdx, true);
+                EmitLabelDef(label, owner, isMethod);
             }
 
             CurrentTypesDebug.Add($"{source} = {string.Join(",", CurrentTypes)}");
+            return this;
         }
 
         public void EmitOpcodes(params Opcode[] opcodes)
         {
-            if (Pass == Pass.PatchLabels)
+            if (CurrentLabelAddress >= 0)
             {
                 foreach (var opcode in opcodes)
                 {
@@ -420,7 +258,7 @@ namespace SbcLibrary
 
         public Compiler Emit(params EmitArg[] args)
         {
-            foreach (var arg in args)
+            foreach (var arg in args.Where(a => a.Arg != null))
             {
                 switch (arg.Arg)
                 {
@@ -443,6 +281,10 @@ namespace SbcLibrary
                         action();
                         break;
 
+                    case EmitArg[] emitargs:
+                        Emit(emitargs);
+                        break;
+
                     default:
                         throw new Exception($"Can't emit {arg}");
                 }
@@ -454,110 +296,151 @@ namespace SbcLibrary
 
         public Compiler Include(Node node)
         {
-            if (!IncludedNodes.Contains(node) && node != null)
+            if (node != null && !IncludedNodes.Contains(node) && (node as Method)?.MethodBase.IsAbstract != true)
             {
+                Debug.Assert(node.ToString() != "SbcLibrary.Class");
+                Debug.Assert(!(node is Method method && method.Owner.Type.IsGenericTypeDefinition));
                 IncludedNodes.Add(node);
-
-                if (node.IsInterface)
-                    IncludedInterfaces.Add(node);
+                node.OnInclude();
             }
 
             return this;
         }
 
-        public void IncludeString(Node node)
+        public void IncludeString(string value)
         {
-            Debug.Assert(Pass == Pass.CompileConst);
+            var label = $@"""{value}""";
 
-            if (LabelDefs.ContainsKey(node.StringLabel))
+            if (LabelDefs.ContainsKey(label))
                 return;
 
-            LabelRefs.Add(new Label("System.String", CurrentConstAddr));
-            Compilation.ConstData.Add(0);
-
-            LabelDefs.Add(node.StringLabel, new Label(node.StringLabel, CurrentConstAddr));
-            Compilation.AddressLabels[CurrentConstAddr] = node.StringLabel;
-            Compilation.ConstData.Add(node.StringValue.Length);
-            Compilation.ConstData.AddRange(node.StringValue.Select(c => (int)c));
+            Compilation.ConstData.Add(ConstRef(typeof(string).Id(), this));
+            ConstDef(label).Label(label);
+            Compilation.ConstData.Add(value.Length);
+            Compilation.ConstData.AddRange(value.Select(c => (int)c));
         }
 
-        public Node GetClass(TypeData name)
+        public Class GetClass(Type type, Type implements = null)
         {
-            if (Classes.TryGetValue(name, out var classNode))
-                return classNode;
+            if (!Types.TryGetValue(type.Id(), out var result))
+            {
+                if (type.IsArray)
+                {
+                    return GetClass(typeof(Array));
+                }
 
-            if (!TemplateClasses.TryGetValue(name.Name, out classNode))
-                throw new Exception($"Can't find class '{name.Name}'");
+                var classCount = Classes.Count;
 
-            ProcessAsmContent(classNode.ClassTemplate(name.Args));
+                if (type.IsGenericType && !type.IsGenericTypeDefinition)
+                {
+                    var generic = type.GetGenericTypeDefinition();
+                    var specific = GetClass(generic).Type.MakeGenericType(type.GenericTypeArguments);
 
-            if (Classes.TryGetValue(name, out classNode))
-                return classNode;
+                    result = new Class(this, specific.GetTypeInfo(), type);
+                }
+                else
+                {
+                    result = new Class(this, type.GetTypeInfo(), implements);
+                }
 
-            throw new Exception($"Can't find class '{name}'");
+                for (int i = classCount; i < Classes.Count; i++)
+                {
+                    Classes[i].LoadMethods();
+                    Include(Classes[i]);
+                }
+            }
+
+            return result;
         }
 
-        public int GetElementSize(TypeData type)
-            => type == null || type.IsSystemType || type.Suffix != null
-                    ? 1
-                    : type.Name == "void"
-                        ? 0
-                        : GetClass(type).ElementSize;
+        public List<FrameItem> GetElements(Type type)
+            => type == typeof(void)
+                ? new List<FrameItem>()
+                : type.IsArray
+                    ? new List<FrameItem> { new FrameItem { Type = type.FullName } }
+                    : GetClass(type).Elements;
 
-        public int PopulateArgData(IEnumerable<ArgData> args, int offset = 0)
+        public int PopulateArgData(ArgData[] args, int offset = 0)
         {
             foreach (var arg in args)
             {
                 arg.Offset = offset;
-                arg.ElementSize = GetElementSize(arg.Type);
-                offset += arg.ElementSize;
+                arg.Elements = GetElements(arg.Type).Select(f => new FrameItem(f)).ToList().Prefix(arg.Name);
+                offset += arg.Elements.Count;
             }
 
             return offset;
         }
 
+        public Type TypePeek(int skip = 0)
+            => Correct(CurrentTypes.Skip(skip).First());
+
         public Compiler TypePop()
+            => this.With(c => CurrentTypes.Pop());
+
+        public Compiler TypePush(Type type, int popCount = 0)
         {
-            CurrentTypes.Pop();
+            for (int i = 0; i < popCount; i++)
+                CurrentTypes.Pop();
+
+            if (type != null)
+                CurrentTypes.Push(type);
+
             return this;
         }
 
-        public Compiler TypePush(TypeData type)
-        {
-            CurrentTypes.Push(type);
-            return this;
-        }
+        public bool TypesAreFloats => TypePeek(0) == typeof(float) && TypePeek(1) == typeof(float)
+                                            ? true
+                                            : TypePeek(0) != typeof(float) && TypePeek(1) != typeof(float)
+                                                ? false
+                                                : throw new Exception("mix of types");
     }
 
-    public enum Pass
+    public class MetadataBase
     {
-        Parse,
-        CompileExecutable,
-        CompileConst,
-        PatchLabels
-    }
-
-    public class ClassData
-    {
-        public string Name { get; set; }
-        public List<ArgData> Fields { get; set; }
-    }
-
-    public class MethodData
-    {
+        public string NameSpace { get; set; }
         public string ClassName { get; set; }
+    }
+
+    public class ClassData : MetadataBase
+    {
+        public int Address { get; set; }
+        public ArgData[] Fields { get; set; }
+    }
+
+    public class MethodData : MetadataBase
+    {
         public string Signature { get; set; }
         public int AddrIdx { get; set; }
         public int Range { get; set; }
-        public string[] FrameItems { get; set; }
+        public FrameItem[] FrameItems { get; set; }
+    }
+
+    public class FrameItem
+    {
+        public FrameItem(FrameItem frameItem = null)
+        {
+            Cat = frameItem?.Cat;
+            Name = frameItem?.Name;
+            Type = frameItem?.Type;
+        }
+
+        public string Cat { get; set; }
+        public string Name { get; set; }
+        public string Type { get; set; }
     }
 
     public class ArgData
     {
+        public ArgData(string name, Type type)
+        {
+            Name = name;
+            Type = type;
+        }
         public int Offset { get; set; }
-        public int ElementSize { get; set; }
-        public string Signature { get; set; }
+        public List<FrameItem> Elements { get; set; }
         public string Name { get; set; }
-        public TypeData Type { get; set; }
+        public Type Type { get; set; }
+        public override string ToString() => $"{Type.FullName} {Name}";
     }
 }

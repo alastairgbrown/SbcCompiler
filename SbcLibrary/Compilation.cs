@@ -11,8 +11,9 @@ namespace SbcLibrary
         public List<Opcode> Opcodes { get; } = new List<Opcode>();
         public List<int> ConstData { get; } = new List<int>();
         public int StaticDataCount { get; set; }
-        public SortedDictionary<int, string> ExecutableLines { get; } = new SortedDictionary<int, string>();
+        public SortedDictionary<int, SourceData> ExecutableLines { get; } = new SortedDictionary<int, SourceData>();
         public List<MethodData> MethodData { get; } = new List<MethodData>();
+        public List<ClassData> ClassData { get; } = new List<ClassData>();
         public SortedSet<int> AddressWritable { get; } = new SortedSet<int>();
         public SortedDictionary<int, string> AddressLabels { get; } = new SortedDictionary<int, string>();
 
@@ -77,5 +78,12 @@ namespace SbcLibrary
             AddressWritable.Remove(Config.StackStart);
         }
 
+    }
+
+    public class SourceData
+    {
+        public string Source { get; set; }
+        public string[] Stack { get; set; }
+        public bool IsMethod { get; set; }
     }
 }
