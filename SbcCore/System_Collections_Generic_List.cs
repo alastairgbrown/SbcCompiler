@@ -117,6 +117,16 @@ namespace SbcCore
                 _current = default(T);
             }
         }
+
+        public T[] ToArray()
+        {
+            var array = new T[Count];
+
+            for (int i = 0; i < Count; i++)
+                array[i] = _items[i];
+
+            return array;
+        }
     }
 
 }

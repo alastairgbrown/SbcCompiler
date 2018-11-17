@@ -30,9 +30,11 @@ namespace SbcLibrary
         public int InputReadyAddress { get; set; } = 0x40002;
         public int BreakAddress { get; set; } = 0x40003;
         public int StepsPerRun { get; set; } = 1000000;
+        public int MethodMetadata { get; set; }
 
         public int BreakStop { get; set; } = 0;
         public int BreakAssert { get; set; } = 1;
+        public int BreakThrow { get; set; } = 2;
 
         public int MaxPfx() => (1 << PfxBits) - 1;
         public int AddrSlotToAddrIdx(int addr, int slot) => (addr * SlotsPerMemoryUnit) + slot;

@@ -45,6 +45,17 @@ namespace SbcCore
         }
 
         public override int GetHashCode() => m_value;
-        public override bool Equals(Object obj) => obj is System_Int32 value && m_value == value.m_value;
+        public override bool Equals(object obj) => obj is System_Int32 value && m_value == value.m_value;
+    }
+
+    [ImplementClass(typeof(IntPtr))]
+    struct System_IntPtr
+    {
+        internal int m_value;
+
+        public override string ToString() => m_value.ToString();
+        public override int GetHashCode() => m_value;
+        public override bool Equals(object obj) => obj is System_IntPtr value && m_value == value.m_value;
+        public static explicit operator int(System_IntPtr value) => value.m_value;
     }
 }

@@ -1,5 +1,6 @@
 ﻿using SbcLibrary;
 using System;
+using System.Collections.Generic;
 using System.Reflection;
 
 namespace SbcCore
@@ -18,21 +19,26 @@ namespace SbcCore
         public System_Type _elementType;
         public int[] _interfaces;
         public int _interfaceIndex;
+        public EnumValues _enumValues;
 
         public System_Type GetElementType() => _elementType;
         public bool IsArray => _base == InternalCast(typeof(Array));
         public bool IsValueType => _base == InternalCast(typeof(ValueType));
         public bool IsInterface => _interfaceIndex >= 0;
+        public bool IsEnum => _enumValues != null;
 
         [Inline]
-        public static System_Type InternalCast(Type type) => Global.Emit<System_Type>();
+        private static System_Type InternalCast(Type type) => Global.Emit<System_Type>();
 
         [Inline]
         public static System_Type GetTypeFromHandle(RuntimeTypeHandle handle) => Global.Emit<System_Type>();
 
         public static bool op_Equality(Type a, Type b) => ReferenceEquals(a, b);
 
-        public bool IsInstanceOfType(object obj) => IsInst(obj) == obj;
+        public bool IsInstanceOfType(object obj) => IsInst(obj) != null;
+
+        public virtual string[] GetEnumNames() => _enumValues._names;
+        public virtual Array GetEnumValues() => _enumValues._values;
 
         public object IsInst(object obj)
         {
@@ -47,4 +53,5 @@ namespace SbcCore
             return type == this ? obj : null;
         }
     }
+
 }

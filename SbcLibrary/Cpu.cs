@@ -379,7 +379,7 @@ namespace SbcLibrary
         {
             RC = RB;
             RB = RA;
-            RA = RX;
+            RA = RX + RK;
             RK = PF = EF = 0;
             PC += (SLOT = (SLOT + 1) % SlotsPerMemoryUnit) == 0 ? 1 : 0;
         }
@@ -397,7 +397,7 @@ namespace SbcLibrary
         {
             RC = RB;
             RB = RA;
-            RA = RY;
+            RA = RY + RK;
             RK = PF = EF = 0;
             PC += (SLOT = (SLOT + 1) % SlotsPerMemoryUnit) == 0 ? 1 : 0;
         }

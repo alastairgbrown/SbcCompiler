@@ -44,6 +44,10 @@
     <Compile Include="SbcLibrary_Memory.cs" />
     <Compile Include="System_Collections_Generic_Dictionary.cs" />
     <Compile Include="System_Collections_Generic_KeyValuePair.cs" />
+    <Compile Include="System_Delegate.cs" />
+    <Compile Include="System_Enum.cs" />
+    <Compile Include="System_Environment.cs" />
+    <Compile Include="System_Exception.cs" />
     <Compile Include="System_GC.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Snippets.cs" />
@@ -56,14 +60,17 @@
     <Compile Include="System_Diagnostics_Debugger.cs" />
     <Compile Include="System_Diagnostics_Debug.cs" />
     <Compile Include="System_Math.cs" />
+    <Compile Include="System_NotImplementedException.cs" />
     <Compile Include="System_Single.cs" />
     <Compile Include="System_Int32.cs" />
     <Compile Include="System_Object.cs" />
     <Compile Include="System_String.cs" />
+    <Compile Include="System_SystemException.cs" />
     <Compile Include="System_Text_StringBuilder.cs" />
     <Compile Include="System_Type.cs" />
     <Compile Include="System_ValueType.cs" />
     <Compile Include="Tests.cs" />
+    <Compile Include="SbcLibrary_Throw.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\SbcLibrary\SbcLibrary.csproj">

@@ -175,7 +175,8 @@ namespace SbcEmulator
 
             if (e.Key == Config.BreakAddress)
             {
-                throw e.Value == Config.BreakAssert ? new Exception("Assert") : new BreakException();
+                throw e.Value == Config.BreakAssert ? new Exception("Assert") :
+                      e.Value == Config.BreakThrow ? new Exception("Throw") : new BreakException();
             }
 
             if (e.Key == Config.HeapPointer &&
@@ -206,6 +207,7 @@ namespace SbcEmulator
 
         public string DisplayAddrSlot(int addrSlot)
             => $"{DisplayNumber(Config.AddrSlotToAddr(addrSlot))}.{Config.AddrSlotToSlot(addrSlot)}";
+            //=> $"{addrSlot}/{Config.AddrSlotToAddrIdx(addrSlot)}";
 
         private void RefreshCode()
         {

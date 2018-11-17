@@ -19,6 +19,9 @@ namespace SbcCore
             DictionaryTests();
             IteratorTests();
             FloatTests();
+            ThrowTests();
+            DelegateTests();
+            EnumTests();
         }
 
         public static void BasicTests()
@@ -153,7 +156,13 @@ namespace SbcCore
             Console.WriteLine(nameof(DictionaryTests) + " passed");
         }
 
-        [Vars("list","dict","text")]
+        public static IEnumerable<string> Yielder()
+        {
+            for (int i = 'X'; i <= 'Z'; i++)
+                yield return ((char)i).ToString();
+        }
+
+        [Vars("list", "dict", "text")]
         public static void IteratorTests()
         {
             var list = new List<string> { "A", "B", "C" };
@@ -170,7 +179,12 @@ namespace SbcCore
                 text.Append(kvp.Key).Append(kvp.Value);
             }
 
-            Debug.Assert(text.ToString() == "ABCD1E2F3", "iterator test");
+            foreach (var y in Yielder())
+            {
+                text.Append(y);
+            }
+
+            Debug.Assert(text.ToString() == "ABCD1E2F3XYZ", "iterator test");
             Console.WriteLine(nameof(IteratorTests) + " passed");
         }
 
@@ -208,6 +222,138 @@ namespace SbcCore
             Debug.Assert(f1p2345.ToString().StartsWith("1.234"), "Float to string test 6");
             Debug.Assert((-f1p2345).ToString().StartsWith("-1.234"), "Float to string test 7");
             Console.WriteLine(nameof(FloatTests) + " passed");
+        }
+
+        [Vars("message")]
+        public static void ThrowTests()
+        {
+            var message = new StringBuilder();
+
+            try
+            {
+                try
+                {
+                    throw new Exception("Text Exception 1");
+                }
+                catch
+                {
+                    message.AppendLine("Catch");
+                    throw;
+                }
+                finally
+                {
+                    message.AppendLine("Finally1");
+                }
+            }
+            catch (NotImplementedException ex)
+            {
+                message.AppendLine(nameof(NotImplementedException)).AppendLine(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                message.AppendLine(nameof(Exception)).AppendLine(ex.Message);
+            }
+            finally
+            {
+                message.AppendLine("Finally2");
+            }
+
+            try
+            {
+                ThrowTestFunction(message);
+            }
+            catch (Exception ex)
+            {
+                message.Append(ex.StackTrace);
+            }
+
+            Debug.Assert(message.ToString() ==
+                "Catch\r\n" +
+                "Finally1\r\n" +
+                "Exception\r\n" +
+                "Text Exception 1\r\n" +
+                "Finally2\r\n" +
+                "Finally3\r\n" +
+                "System.Void SbcCore.Tests::ThrowTestFunction(System.Text.StringBuilder)\r\n" +
+                "System.Void SbcCore.Tests::ThrowTests()\r\n" +
+                "System.Void SbcCore.Tests::RunAllTests()\r\n" +
+                "System.Void HelloWorld.Program::Main()\r\n",
+                "Exception Test");
+            Console.WriteLine(nameof(ThrowTests) + " passed");
+        }
+
+        public static void ThrowTestFunction(StringBuilder message)
+        {
+            try
+            {
+                throw new Exception("Text Exception 2");
+            }
+            finally
+            {
+                message.AppendLine("Finally3");
+            }
+        }
+
+        public static void DelegateTests()
+        {
+            var message = new StringBuilder();
+            string lambda2 = "Lambda2", lambda3 = "Lambda3", lambda4 = "Lambda4";
+            Action<StringBuilder> function1 = DelegateTestFunction;
+            Action<StringBuilder> function2 = x => x.AppendLine("Lambda1");
+            Action<StringBuilder> function3 = x => x.AppendLine(lambda2);
+            Action<StringBuilder, string> function4 = (x, y) => x.AppendLine(y);
+            Func<string> function5 = () => lambda4;
+
+            function1(message);
+            function2(message);
+            function3(message);
+            function4(message, lambda3);
+            message.AppendLine(function5());
+            Debug.Assert(message.ToString() ==
+                "DelegateTestFunction\r\n" +
+                "Lambda1\r\n" +
+                "Lambda2\r\n" +
+                "Lambda3\r\n" +
+                "Lambda4\r\n",
+                "Delegate Test");
+            Console.WriteLine(nameof(DelegateTests) + " passed");
+        }
+
+        public static void DelegateTestFunction(StringBuilder message)
+        {
+            message.AppendLine(nameof(DelegateTestFunction));
+        }
+
+        public static void EnumTests()
+        {
+            int i = 0;
+            Debug.Assert((int)TestEnum1.EnumValue0 == i++);
+            Debug.Assert((int)TestEnum1.EnumValue1 == i++);
+            Debug.Assert((int)TestEnum1.EnumValue2 == i++);
+            Debug.Assert((int)TestEnum1.EnumValue3 == i++);
+            Debug.Assert($"{TestEnum1.EnumValue3}" == "EnumValue3");
+            Debug.Assert($"{(TestEnum1)99}" == "99");
+            Debug.Assert($"{TestEnum2.EnumValue1 | TestEnum2.EnumValue2}" == "EnumValue2, EnumValue1");
+            Debug.Assert($"{TestEnum2.EnumValue0}" == "EnumValue0");
+            Debug.Assert($"{(TestEnum2)99}" == "99");
+            Console.WriteLine(nameof(EnumTests) + " passed");
+        }
+
+        public enum TestEnum1
+        {
+            EnumValue0,
+            EnumValue1,
+            EnumValue2,
+            EnumValue3,
+        }
+
+        [Flags]
+        public enum TestEnum2
+        {
+            EnumValue0 = 0,
+            EnumValue1 = 1,
+            EnumValue2 = 2,
+            EnumValue4 = 4,
         }
 
         public struct TestStruct

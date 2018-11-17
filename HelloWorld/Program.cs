@@ -11,7 +11,7 @@ namespace HelloWorld
         static void Main()
         {
             //Console.WriteLine("Hello World");
-            Console.WriteLine($"Hello World {123} {"456"} {TestStatic} {'0'}");
+            //Console.WriteLine($"Hello World {123} {"456"} {TestStatic} {'0'}");
 
             Tests.RunAllTests();
 

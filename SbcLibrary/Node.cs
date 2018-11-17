@@ -7,6 +7,7 @@
         public Config Config => Compiler.Config;
         public ISnippets Snippets => Compiler.Snippets;
         public abstract string Id { get; }
+        public object IncludedFrom { get; set; }
         public abstract void GenerateExecutable();
         public virtual void GenerateConstData() { }
         public virtual void OnInclude() { }

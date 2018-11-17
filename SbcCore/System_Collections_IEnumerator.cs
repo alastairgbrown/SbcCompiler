@@ -2,12 +2,21 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using System.Runtime.InteropServices;
+using System.Runtime.Serialization;
 
 namespace SbcCore
 {
+    [ImplementClass(typeof(ISerializable))]
+    public interface System_ISerializable
+    {
+    }
+
+    [ImplementClass(typeof(_Exception))]
+    public interface System__Exception
+    {
+    }
+
     [ImplementClass(typeof(IDisposable))]
     public interface System_IDisposable
     {

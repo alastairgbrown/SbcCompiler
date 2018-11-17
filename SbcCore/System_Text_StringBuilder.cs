@@ -19,6 +19,8 @@ namespace SbcCore
         public System_Text_StringBuilder Append(object text) => Append(text.ToString());
         public System_Text_StringBuilder Append(int text) => Append(text.ToString());
         public System_Text_StringBuilder Append(string text) => Append(text, 0, text.Length);
+        public System_Text_StringBuilder AppendLine() => Append(Environment.NewLine);
+        public System_Text_StringBuilder AppendLine(string value) => Append(value).Append(Environment.NewLine);
 
         public System_Text_StringBuilder AppendFormat(string format, params object[] args)
         {

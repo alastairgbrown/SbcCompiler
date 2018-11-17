@@ -19,29 +19,37 @@ namespace SbcCore
 
         public Action MethodPreamble => () =>
         {
-            var args = Global.Compiler.CurrentArgs;
-
             // Save the return address and move the frame pointer
+            Global.Emit(Opcode.STY);
             Global.Emit(-Global.Compiler.CurrentFrameSize, Opcode.AKY);
-            Global.Emit(Global.Compiler.CurrentFrameSize, Opcode.STY);
 
-            // copy stack to args
-            for (int i = 0; i < args.Length; i++)
+            var argsSize = Global.Compiler.CurrentArgs.Sum(a => a.Elements.Count);
+            var varsSize = Global.Compiler.CurrentLocals.Sum(a => a.Elements.Count);
+
+            // Copy stack to args
+            if (argsSize > 0)
             {
-                Global.Emit(-args.Length + 1 + i, Opcode.LDX, args[i].Offset, Opcode.STY);
+                if (argsSize == 1)
+                    Global.Emit(StackGet, 1, Opcode.STY);
+                else
+                    Global.Emit(1, Opcode.PUY,            // Destination
+                                1 - argsSize, Opcode.PUX, // Source
+                                argsSize, Opcode.PSH,     // Size
+                                Opcode.MFD);
+
+                Global.Emit(-argsSize, Opcode.AKX);
             }
 
-            // Consume the stack
-            if (args.Any())
+            // Clear vars
+            if (varsSize > 0)
             {
-                Global.Emit(-Global.Compiler.CurrentArgs.Length, Opcode.AKX);
-            }
+                Global.Emit(Opcode.PSH, 1 + argsSize, Opcode.STY);
 
-            // Blank out the variables
-            foreach (var local in Global.Compiler.CurrentLocals)
-            {
-                for (int i = 0; i < local.Elements.Count; i++)
-                    Global.Emit(Opcode.PSH, local.Offset + i, Opcode.STY);
+                if (varsSize > 1)
+                    Global.Emit(2 + argsSize, Opcode.PUY, // Destination
+                                1 + argsSize, Opcode.PUY, // Source
+                                varsSize - 1, Opcode.PSH, // Size
+                                Opcode.MFD);
             }
         };
 
@@ -56,16 +64,31 @@ namespace SbcCore
 
         public Action CopyFromFrameToStack(ArgData arg) => () =>
         {
+            var elementSize = arg.Elements.Count;
             Global.Compiler.TypePush(arg.Type);
-            for (int i = 0; i < arg.Elements.Count; i++)
-                Global.Emit(arg.Offset + i, Opcode.LDY, StackPush);
+
+            if (elementSize == 1)
+                Global.Emit(arg.Offset, Opcode.LDY, StackPush);
+            else
+                Global.Emit(elementSize, Opcode.AKX,
+                            1 - elementSize, Opcode.PUX, // Destination
+                            arg.Offset, Opcode.PUY,      // Source
+                            elementSize, Opcode.PSH,     // Size
+                            Opcode.MFD);
         };
 
         public Action CopyFromStackToFrame(ArgData arg) => () =>
         {
+            var elementSize = arg.Elements.Count;
             Global.Compiler.TypePop();
-            for (int i = arg.Elements.Count - 1; i >= 0; i--)
-                Global.Emit(StackPop, arg.Offset + i, Opcode.STY);
+            if (elementSize == 1)
+                Global.Emit(StackPop, arg.Offset, Opcode.STY);
+            else
+                Global.Emit(Opcode.PUY, arg.Offset, Opcode.AKA,      // Destination
+                            Opcode.PUX, 1 - elementSize, Opcode.AKA, // Source
+                            elementSize, Opcode.PSH,                 // Size
+                            Opcode.MFD,
+                            -elementSize, Opcode.AKX);
         };
 
         public Action CopyFromMemoryToStack(Type type) => () =>
@@ -77,7 +100,9 @@ namespace SbcCore
                 Global.Emit(Opcode.LDA, StackPush);
             else
                 Global.Emit(elementSize, Opcode.AKX,
-                            Opcode.PUX, 1 - elementSize, Opcode.AKA, Opcode.SWP, elementSize, Opcode.PSH,
+                            1 - elementSize, Opcode.PUX, // Destination
+                            Opcode.SWP,                  // Source already on stack 
+                            elementSize, Opcode.PSH,     // Size   
                             Opcode.MFD);
         };
 
@@ -89,7 +114,9 @@ namespace SbcCore
             if (elementSize == 1)
                 Global.Emit(StackPop, Opcode.SWP, Opcode.STA);
             else
-                Global.Emit(Opcode.PUX, 1 - elementSize, Opcode.AKA, elementSize, Opcode.PSH,
+                Global.Emit(                             // Destination already on stack
+                            1 - elementSize, Opcode.PUX, // Source
+                            elementSize, Opcode.PSH,     // Size
                             Opcode.MFD,
                             -elementSize, Opcode.AKX);
         };
@@ -99,7 +126,7 @@ namespace SbcCore
             Global.Emit(count, Opcode.AKX);
 
             if (index > 0)
-                Global.Emit(Opcode.PUX, Opcode.PUX, -count, Opcode.AKA, index, Opcode.PSH, Opcode.MBD);
+                Global.Emit(Opcode.PUX, -count, Opcode.PUX, index, Opcode.PSH, Opcode.MBD);
         };
 
         public Action Compare(string keyword) => () =>

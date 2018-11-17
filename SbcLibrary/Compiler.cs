@@ -27,7 +27,6 @@ namespace SbcLibrary
         public List<Class> Classes { get; } = new List<Class>();
         public string MifFileName { get; private set; }
         public ISnippets Snippets { get; private set; }
-        public Stack<int> FinallyAddresses { get; } = new Stack<int>();
 
         public Method Main => Classes.Single(c => c.Type.Name == "Program").GetMethod(typeof(void), "Main");
         public Method StringCtor => GetClass(typeof(string)).GetMethod(typeof(void), ".Ctor", typeof(char[]), typeof(int), typeof(int));
@@ -38,6 +37,9 @@ namespace SbcLibrary
         public Method Newarr => GetClass(typeof(Memory)).GetMethod(typeof(int), nameof(Memory.Newarr), typeof(int), typeof(int), typeof(int));
         public Method Newobj => GetClass(typeof(Memory)).GetMethod(typeof(int), nameof(Memory.Newobj), typeof(int), typeof(int));
         public Method CallCctors => GetClass(typeof(Memory)).GetMethod(typeof(void), nameof(Memory.CallCCtors));
+        public Method ThrowException => GetClass(typeof(Throw)).GetMethod(typeof(void), nameof(Throw.ThrowException), typeof(Exception));
+        public Method NotImplementedException => GetClass(typeof(Throw)).GetMethod(typeof(void), nameof(Throw.ThrowNotImplementedException));
+        public Method DelegateInvoke => GetClass(typeof(Delegate)).GetMethod(typeof(int), "InvokeInternal", typeof(int));
 
         public int CurrentAddrIdx => Config.ExecutableStart + Compilation.Opcodes.Count;
         public int CurrentConstAddr => Config.ConstStart + Compilation.ConstData.Count;
@@ -65,12 +67,6 @@ namespace SbcLibrary
                 new Class(this, type);
 
             Classes.ForEach(c => c.LoadMethods());
-
-            //var dss = new Dictionary<string, string>();
-            //var dsst = typeof(Dictionary<string, string>);
-            //var method = dsst.GetTypeInfo().DeclaredMethods.Single(m => m.Name == "Insert");
-            //var ilReader = new ILReader(method.GetMethodBody(), method.Module, dsst.GenericTypeArguments, null);
-            //var instructions = ilReader.Instructions.ToArray();
         }
 
         public void Compile()
@@ -82,6 +78,8 @@ namespace SbcLibrary
 
             Include(GetClass(typeof(string)));
             Include(GetClass(typeof(int)));
+            Include(GetClass(typeof(MethodMetadata)));
+            Include(GetClass(typeof(MethodHandlerData)));
             Include(Main);
 
             EmitSource("Initialising stack and frame", "Startup");
@@ -94,7 +92,7 @@ namespace SbcLibrary
             EmitSource("Calling main");
             Emit(new Label(Main, this), Opcode.PSH, Opcode.JSR);
             EmitSource("Break");
-            Emit(Break.Action);
+            Emit(Break.InlineAction);
             EmitMethodData("Startup", "Startup.Startup", "Startup", null, new ArgData[0], new ArgData[0]);
 
             for (var i = 0; i < IncludedNodes.Count; i++)
@@ -112,13 +110,20 @@ namespace SbcLibrary
 
             Config.ExecutableSize = (Compilation.Opcodes.Count + Config.SlotsPerMemoryUnit - 1) / Config.SlotsPerMemoryUnit;
             Config.ConstStart = Config.ExecutableStart + Config.ExecutableSize;
-             
+
             foreach (var node in IncludedNodes)
                 node.GenerateConstData();
 
+            Config.MethodMetadata = CurrentConstAddr;
+            Compilation.ConstData.Add(IncludedNodes.OfType<Method>().Count());
+            foreach (var node in IncludedNodes.OfType<Method>())
+                node.GenerateMethodMetadata();
+            Debug.Assert(CurrentConstAddr - Config.MethodMetadata == 1 + IncludedNodes.OfType<Method>().Count() * GetClass(typeof(MethodMetadata)).Elements.Count);
+
             Config.ConstSize = Compilation.ConstData.Count;
             Config.StaticSize = Compilation.StaticDataCount;
-            LabelDefs.Add(new Label("Config.StaticSize", Config.StaticSize));
+            LabelDefs.Add(new Label("Config.StaticSize", this, Config.StaticSize));
+            LabelDefs.Add(new Label("Config.MethodMetadata", this, Config.MethodMetadata));
 
             PatchLabels();
             Compilation.SetAddressInfo();
@@ -196,7 +201,13 @@ namespace SbcLibrary
             });
         }
 
-        public void EmitMethodData(string nameSpace, string className, string signature, string id, ArgData[] args, ArgData[] locals)
+        public void EmitMethodData(
+            string nameSpace, 
+            string className, 
+            string signature, 
+            string id, 
+            ArgData[] args, 
+            ArgData[] locals)
         {
             Compilation.MethodData.Add(new MethodData
             {
@@ -294,7 +305,7 @@ namespace SbcLibrary
         }
 
 
-        public Compiler Include(Node node)
+        public Compiler Include(Node node, object includedFrom = null)
         {
             if (node != null && !IncludedNodes.Contains(node) && (node as Method)?.MethodBase.IsAbstract != true)
             {
@@ -302,6 +313,7 @@ namespace SbcLibrary
                 Debug.Assert(!(node is Method method && method.Owner.Type.IsGenericTypeDefinition));
                 IncludedNodes.Add(node);
                 node.OnInclude();
+                node.IncludedFrom = includedFrom;
             }
 
             return this;
@@ -376,7 +388,10 @@ namespace SbcLibrary
             => Correct(CurrentTypes.Skip(skip).First());
 
         public Compiler TypePop()
-            => this.With(c => CurrentTypes.Pop());
+        {
+            CurrentTypes.Pop();
+            return this;
+        }
 
         public Compiler TypePush(Type type, int popCount = 0)
         {
@@ -442,5 +457,24 @@ namespace SbcLibrary
         public string Name { get; set; }
         public Type Type { get; set; }
         public override string ToString() => $"{Type.FullName} {Name}";
+    }
+
+    public struct MethodMetadata
+    {
+        public string _signature;
+        public bool _isStatic;
+        public int _frameSize;
+        public int _start;
+        public int _stop;
+        public MethodHandlerData[] _handlers;
+    }
+
+    public struct MethodHandlerData
+    {
+        public bool _isFinally;
+        public int _tryStart;
+        public int _tryStop;
+        public int _handlerStart;
+        public Type _catchType;
     }
 }

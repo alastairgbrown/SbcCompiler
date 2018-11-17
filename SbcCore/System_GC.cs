@@ -9,18 +9,18 @@ namespace SbcCore
     {
         public static void Collect()
         {
-            var stack = GetRX();
-            var frame = GetRY() + GetFrameSize();
+            var stack = Memory.RX;
+            var frame = Memory.RY + Memory.CurrentFrameSize;
 
-            GcMarkValidBlocks();
+            MarkValidBlocks();
 
             // Recursively mark all the claimed blocks with 2
-            GcCollectRange(Global.Config.StackStart, stack - 1);
-            GcCollectRange(frame, Global.Config.StackStart + Global.Config.StackSize);
-            GcCollectRange(Global.Config.StaticStart, Global.Config.StaticStart + GetConfigStaticSize());
+            CollectRange(Global.Config.StackStart, stack - 1);
+            CollectRange(frame, Global.Config.StackStart + Global.Config.StackSize);
+            CollectRange(Global.Config.StaticStart, Global.Config.StaticStart + Memory.StaticSize);
 
-            GcReclaimBlocks();
-            GcJoinContiguousFreeBlocks();
+            ReclaimBlocks();
+            JoinContiguousFreeBlocks();
             Global.Memory[Global.Config.HeapPointer] = Global.Config.HeapStart;
         }
 
@@ -44,7 +44,7 @@ namespace SbcCore
         }
 
 
-        private static void GcCollectRange(int start, int stop)
+        private static void CollectRange(int start, int stop)
         {
             for (int i = start; i < stop; i++)
             {
@@ -60,15 +60,15 @@ namespace SbcCore
                     {
                         Global.Memory[flagAddr] = 2;
                         var length = Global.Memory[addr];
-                        GcCollectRange(addr + 2, addr + 2 + length);
+                        CollectRange(addr + 2, addr + 2 + length);
                     }
                 }
             }
         }
 
-        private static void GcMarkValidBlocks()
+        private static void MarkValidBlocks()
         {
-            SbcLibrary_Memory.Clear(Global.Config.HeapMarkerStart, Global.Config.HeapMarkerSize);
+            Memory.Clear(Global.Config.HeapMarkerStart, Global.Config.HeapMarkerSize);
 
             // Mark all the allocated blocks with 1
             for (int addr = Global.Config.HeapStart, size;
@@ -84,7 +84,7 @@ namespace SbcCore
             }
         }
 
-        private static void GcReclaimBlocks()
+        private static void ReclaimBlocks()
         {
             // Reclaim all the unclaimed memory (still marked with 1)
             for (int addr = Global.Config.HeapStart, size;
@@ -97,13 +97,13 @@ namespace SbcCore
                     Global.Memory[Global.Config.HeapMarkerStart + ((addr - Global.Config.HeapStart) >> 4)] == 1)
                 {
                     size = -size;
-                    SbcLibrary_Memory.Clear(addr, -size);
+                    Memory.Clear(addr, -size);
                     Global.Memory[addr] = size;
                 }
             }
         }
 
-        private static void GcJoinContiguousFreeBlocks()
+        private static void JoinContiguousFreeBlocks()
         {
             int lastfree = -1, lastsize = 0;
 
@@ -131,20 +131,5 @@ namespace SbcCore
             }
         }
 
-        [Inline]
-        public static int GetFrameSize()
-            => Global.Emit<int>(Global.Compiler.CurrentFrameSize, Opcode.PSH, Global.Snippets.StackPush);
-
-        [Inline]
-        public static int GetConfigStaticSize()
-            => Global.Emit<int>(new Label("Config.StaticSize", null), Opcode.PSH, Global.Snippets.StackPush);
-
-        [Inline]
-        public static int GetRX()
-            => Global.Emit<int>(Opcode.PUX, Global.Snippets.StackPush);
-
-        [Inline]
-        public static int GetRY()
-            => Global.Emit<int>(Opcode.PUY, Global.Snippets.StackPush);
     }
 }
